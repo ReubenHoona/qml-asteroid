@@ -68,6 +68,10 @@ qt6_add_qml_module(asteroidcontrolsplugin
 
 target_include_directories(asteroidcontrolsplugin PRIVATE src)
 
+# FlatMesh reads its idle timeout from dconf (MDConfItem)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(MLITE6 REQUIRED IMPORTED_TARGET mlite6)
+
 qt_add_shaders(
     asteroidcontrolsplugin "asteroidcontrolsplugin_shaders"
     PREFIX "/org/asteroid/controls"
@@ -101,6 +105,7 @@ target_link_libraries(
         Qt::Svg
         Qt::WaylandClient
         Qt::GuiPrivate
+        PkgConfig::MLITE6
 )
 
 install(
