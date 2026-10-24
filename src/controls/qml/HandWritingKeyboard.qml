@@ -28,6 +28,10 @@ import QtQuick.VirtualKeyboard
     a user to input text without a physical keyboard.
     The HandWritingKeyboard is the default virtual keyboard for 
     AsteroidOS.
+
+    Handwriting needs a handwriting recognition engine in Qt Virtual
+    Keyboard. Without one (Qt 6 ships no free engine), the
+    HandWritingKeyboard shows the on-screen keyboard instead.
    
     In this example, a simple \l TextField is created in the center 
     of the screen with preview text "sample text".  
@@ -54,37 +58,51 @@ import QtQuick.VirtualKeyboard
     \endqml
 
 */
-HandwritingInputPanel {
+Item {
+    id: handWritingKeyboard
     z: 99
     anchors.fill: parent
-    inputPanel: inputPanel
-    Component.onCompleted: {
-        active = true
-        available = true
-    }
 
-    Rectangle {
-        z: -1
+    HandwritingInputPanel {
+        id: handwritingPanel
         anchors.fill: parent
-        color: "black"
-        opacity: 0.7
-        transitions: Transition {
-            PropertyAnimation { properties: "opacity"; easing.type: Easing.InOutQuad }
+        inputPanel: inputPanel
+        Component.onCompleted: {
+            active = true
+            available = true
+        }
+
+        Rectangle {
+            z: -1
+            anchors.fill: parent
+            color: "black"
+            opacity: 0.7
+            transitions: Transition {
+                PropertyAnimation { properties: "opacity"; easing.type: Easing.InOutQuad }
+            }
+        }
+
+        IconButton {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: parent.height/28
+
+            iconName: "ios-checkmark-circle-outline"
+
+            onClicked: Qt.inputMethod.hide()
         }
     }
 
+    // The handwriting panel is only enabled with a handwriting engine
+    // (HandwritingInputPanel.enabled is isHandwritingAvailable()); without
+    // one it stays hidden, and so would this keyboard inside it: show the
+    // keyboard instead, narrow enough for a round screen and low enough to
+    // leave the text fields in the upper part of the screen visible
     InputPanel {
         id: inputPanel
-        visible: false
-    }
-
-    IconButton {
+        visible: !handwritingPanel.enabled && active
+        width: parent.width * 0.82
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: parent.height/28
-
-        iconName: "ios-checkmark-circle-outline"
-
-        onClicked: Qt.inputMethod.hide()
+        y: parent.height * 0.4
     }
 }
