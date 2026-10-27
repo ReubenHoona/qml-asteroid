@@ -74,7 +74,7 @@ Item {
     /*! alias to recieve boolean highlight.forceOn */
     property alias highlight: highlight.forceOn
     /*! size of the icon/s */
-    property int iconSize: height - Dims.h(6)
+    property int iconSize: Math.min(height - Dims.h(6), Dims.h(15))
     /*! size of the label text */
     property int labelFontSize: Dims.l(9)
     /*!
@@ -87,7 +87,9 @@ Item {
     signal clicked()
 
     width: parent.width
-    height: Dims.h(21)
+    // Wear OS touch targets are at least 48 dp: 96 px on the 384 px round
+    // screen (25%), where a row was 21% (80 px); the icon keeps its size
+    height: DeviceSpecs.hasRoundScreen ? Dims.h(25) : Dims.h(21)
 
     EdgeEffect { id: edge; item: listItem }
     transform: Scale {
