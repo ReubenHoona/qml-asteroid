@@ -146,6 +146,12 @@ Item {
         property real waveTime: 0
         property bool isVisible: valueMeter.visible && Qt.application.active
 
+        // Particles live up to 8.5 s and keep moving after the meter is
+        // hidden (the launcher hides its quick panel when the user leaves
+        // it): every hidden move still made the window draw a frame. They
+        // go with the meter.
+        onIsVisibleChanged: if (!isVisible) particleContainer.clear()
+
         NumberAnimation on waveTime {
             id: waveAnimation
             running: isIncreasing && enableAnimations && fill.isVisible
@@ -163,6 +169,13 @@ Item {
             property int activeParticles: 0
             property int horizontalBand: 0
             property int spawnInterval: isIncreasing ? 200 : 750
+
+            function clear() {
+                for (var i = children.length - 1; i >= 0; i--) {
+                    if (children[i].finished !== undefined)
+                        children[i].finished()
+                }
+            }
 
             function createParticle() {
                 if (!particleContainer.visible || !fill.isVisible || activeParticles >= 16) {
