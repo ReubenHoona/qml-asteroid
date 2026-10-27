@@ -55,7 +55,7 @@ class QQuickWindow;
  *    the window being shown again or the item becoming visible again
  *    resumes it from where it stopped.
  * The idle timeout comes from dconf (seconds, 0 = always animate while
- * visible, the stock behaviour; unset or not a number = 0):
+ * visible, the stock behaviour; unset or not a number = 3 s):
  *   /org/asteroidos/settings/flatmesh-idle-timeout       applications
  *   /org/asteroidos/settings/flatmesh-idle-timeout-home  the launcher (the
  *       compositor process); unset = same as the applications key

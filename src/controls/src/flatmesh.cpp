@@ -40,12 +40,15 @@
 Q_STATIC_LOGGING_CATEGORY(lcFlatMesh, "asteroid.flatmesh", QtWarningMsg)
 
 /* Seconds of animation after the last input when dconf has no value.
- * 0 = never hold a mesh that is on screen: the stock look. A hidden window,
- * an unexposed Wayland surface or an invisible item always stops the mesh
- * (nobody can see it move); holding a visible mesh after a quiet period is
- * opt-in through the dconf keys below (10 s is the tested value: two full
- * 4.5 s loops of 50 steps after each touch). */
-static const double DEFAULT_IDLE_TIMEOUT_S = 0.0;
+ * A hidden window, an unexposed Wayland surface or an invisible item always
+ * stops the mesh (nobody can see it move). A mesh on screen moves for 3 s
+ * after the window shows up or is touched and then holds its frame, as a
+ * Wear OS screen that nothing changes on stays still: a step every 90 ms
+ * made every open application (Application.qml) redraw and the compositor
+ * flip a frame at 11-12 fps on a screen where nothing else moved
+ * (eos-frametime on #88: Settings at rest 12.2 fps, the watchface 1 fps).
+ * Set the dconf keys below to 0 for the stock, always moving mesh. */
+static const double DEFAULT_IDLE_TIMEOUT_S = 3.0;
 
 static const char APPS_KEY[] = "/org/asteroidos/settings/flatmesh-idle-timeout";
 static const char HOME_KEY[] = "/org/asteroidos/settings/flatmesh-idle-timeout-home";
