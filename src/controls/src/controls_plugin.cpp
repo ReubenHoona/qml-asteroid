@@ -16,6 +16,7 @@
  */
 
 #include "controls_plugin.h"
+#include "rotaryinput.h"
 #include <QFont>
 #include <QGuiApplication>
 
@@ -24,4 +25,6 @@ void ControlsPlugin::initializeEngine(QQmlEngine *engine, const char *uri)
     Q_UNUSED(engine)
     Q_UNUSED(uri)
     QGuiApplication::setFont(QFont("Noto Sans"));
+    /* The crown scrolls lists and pickers in every application */
+    RotaryInput::install();
 }

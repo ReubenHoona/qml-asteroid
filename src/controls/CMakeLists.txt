@@ -6,6 +6,7 @@ set(SRC
 	src/flatmeshnode.cpp
 	src/icon.cpp
 	src/haptics.cpp
+	src/rotaryinput.cpp
 )
 set(HEADERS
 	src/controls_plugin.h
@@ -16,6 +17,7 @@ set(HEADERS
 	src/flatmeshgeometry.h
 	src/icon.h
 	src/haptics.h
+	src/rotaryinput.h
 )
 
 set(controls
@@ -39,6 +41,7 @@ set(controls
         PageDot
         PageHeader
         Particle
+        PositionIndicator
         RemorseTimer
         RowSeparator
         SegmentedArc
@@ -77,7 +80,7 @@ pkg_check_modules(MLITE6 REQUIRED IMPORTED_TARGET mlite6)
 qt_add_shaders(
     asteroidcontrolsplugin "asteroidcontrolsplugin_shaders"
     PREFIX "/org/asteroid/controls"
-    FILES "qml/spinnerfade.frag"
+    FILES "qml/spinnerfade.frag" "qml/positionindicator.frag"
 )
 
 set(controls-docs "$<LIST:TRANSFORM,$<LIST:TRANSFORM,$<LOWER_CASE:${controls}>,PREPEND,qml->,APPEND,.html>")
@@ -105,6 +108,7 @@ target_link_libraries(
         Qt::DBus
         Qt::Qml
         Qt::Quick
+        Qt::QuickPrivate
         Qt::Svg
         Qt::WaylandClient
         Qt::GuiPrivate
