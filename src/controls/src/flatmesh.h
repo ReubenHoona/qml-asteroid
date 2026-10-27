@@ -33,34 +33,39 @@
 #include <QQuickItem>
 #include <QSGNode>
 #include <QColor>
-#include <QTimer>
 #include <QElapsedTimer>
 #include <QPointer>
 #include <QtQml/qqmlregistration.h>
 
 class QQuickWindow;
+class FlatMeshAnimation;
 
 /*
- * The animated triangle background of the launcher and of every application
- * (Application.qml). It moves one step every 90 ms while it is animated, and
- * it only does so while somebody can see it move:
- *  - the item is visible (effective visibility: the launcher hides its home
- *    screen, wallpaper included, while an application covers it, and hides
- *    the wallpaper in always-on-display mode),
- *  - its window is shown and exposed (the compositor hides its window when
- *    the display is off; a Wayland client is unexposed when the compositor
- *    stops sending it frame callbacks),
- *  - and it is not idle: after idleTimeout ms without input on its window
- *    it holds its last frame, and the next touch, crown/wheel or key event,
- *    the window being shown again or the item becoming visible again
- *    resumes it from where it stopped.
- * The idle timeout comes from dconf (seconds, 0 = always animate while
- * visible, the stock behaviour; unset or not a number = 3 s):
- *   /org/asteroidos/settings/flatmesh-idle-timeout       applications
+ * The triangle background of the launcher and of every application
+ * (Application.qml).
+ *
+ * By default it is still: it is drawn once and the screen it sits on
+ * produces no frame unless something on it changes. Wear OS backgrounds do
+ * not move either, and a moving mesh behind every screen costs a frame each
+ * time it moves (the old 90 ms step made every open application redraw at
+ * 11-12 fps; eos-frametime on #88).
+ *
+ * Motion, from dconf /org/asteroidos/settings/flatmesh-motion (read live; a
+ * QML "motion" binding overrides it):
+ *   "static" (default, also unset or unknown)  never moves
+ *   "input"   glides after input on its window (touch, crown/wheel, key, the
+ *             window or the item showing up) for flatmesh-idle-timeout
+ *             seconds (default 3), slows down over the last 0.6 s and stops
+ *   "always"  the stock behaviour: moves for as long as it is visible
+ * In both moving modes it moves at the display rate (a QAbstractAnimation:
+ * Qt Quick's animation driver advances it once per frame, in step with the
+ * vsync), not in 90 ms steps, and only while somebody can see it: the item
+ * visible, its window shown and exposed. "animated: false" keeps it still
+ * whatever the setting.
+ *   /org/asteroidos/settings/flatmesh-idle-timeout       seconds, applications
  *   /org/asteroidos/settings/flatmesh-idle-timeout-home  the launcher (the
  *       compositor process); unset = same as the applications key
- * Both are read live. A QML idleTimeout binding (ms) overrides them.
- * Logging category: asteroid.flatmesh (debug: every start/hold).
+ * Logging category: asteroid.flatmesh (debug: every start/stop).
  */
 class FlatMesh : public QQuickItem
 {
@@ -69,10 +74,13 @@ class FlatMesh : public QQuickItem
     Q_PROPERTY(QColor centerColor WRITE setCenterColor READ getCenterColor)
     Q_PROPERTY(QColor outerColor WRITE setOuterColor READ getOuterColor)
     Q_PROPERTY(bool animated WRITE setAnimated READ getAnimated NOTIFY animatedChanged)
+    Q_PROPERTY(QString motion READ motion WRITE setMotion RESET resetMotion NOTIFY motionChanged)
     Q_PROPERTY(int idleTimeout READ idleTimeout WRITE setIdleTimeout RESET resetIdleTimeout NOTIFY idleTimeoutChanged)
     Q_PROPERTY(bool running READ isRunning NOTIFY runningChanged)
 
 public:
+    enum Motion { Static, AfterInput, Always };
+
     FlatMesh(QQuickItem *parent = 0);
     ~FlatMesh() override;
 
@@ -85,20 +93,30 @@ public:
     QColor getOuterColor() const { return m_outerColor; }
     void setOuterColor(QColor c);
 
-    /* Effective idle timeout in ms, 0 = never idle (always animate) */
+    /* "static", "input" or "always": the effective mode */
+    QString motion() const;
+    /* an empty string goes back to the system setting */
+    void setMotion(const QString &motion);
+    void resetMotion() { setMotion(QString()); }
+
+    /* Effective glide time after input in ms ("input" mode) */
     int idleTimeout() const;
     /* ms; a negative value goes back to the system setting */
     void setIdleTimeout(int ms);
     void resetIdleTimeout() { setIdleTimeout(-1); }
 
     /* Whether the mesh is moving right now */
-    bool isRunning() const { return m_timer.isActive(); }
+    bool isRunning() const;
 
-    /* Counts as user activity: resumes an idle mesh for another idleTimeout */
+    /* Counts as user activity: an "input" mesh glides for another idleTimeout */
     Q_INVOKABLE void wake();
+
+    /* Called by the animation once per frame with its running time in ms */
+    void advance(int ms);
 
 signals:
     void animatedChanged();
+    void motionChanged();
     void idleTimeoutChanged();
     void runningChanged();
 
@@ -109,14 +127,14 @@ protected:
 
 private slots:
     void maybeEnableAnimation();
-    void animate();
     void onVisibleChanged();
-    void reloadIdleTimeout();
+    void reloadSettings();
 
 private:
     void watchWindow(QQuickWindow *window);
     void noteActivity();
     bool windowShowing() const;
+    Motion effectiveMotion() const;
 
     QColor m_centerColor, m_outerColor;
     bool m_animated;
@@ -124,12 +142,15 @@ private:
     float m_animationState;
     int m_loopCount;
     float m_screenScaleFactor;
-    bool m_idle;
     int m_idleTimeoutOverride;   /* ms, < 0: use the system setting */
-    int m_systemIdleTimeout;     /* ms, from dconf, 0 = never idle */
+    int m_systemIdleTimeout;     /* ms, from dconf */
+    int m_motionOverride;        /* Motion, < 0: use the system setting */
+    Motion m_systemMotion;
     QElapsedTimer m_lastActivity;
+    int m_lastAdvance;           /* animation time of the previous frame */
+    float m_speed;               /* 0..1 of full speed, eased in and out */
     QPointer<QQuickWindow> m_window;
-    QTimer m_timer;
+    FlatMeshAnimation *m_animation;
 };
 
 #endif // FLATMESH_H
