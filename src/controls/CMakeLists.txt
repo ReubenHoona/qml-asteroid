@@ -5,6 +5,7 @@ set(SRC
 	src/flatmesh.cpp
 	src/flatmeshnode.cpp
 	src/icon.cpp
+	src/haptics.cpp
 )
 set(HEADERS
 	src/controls_plugin.h
@@ -14,6 +15,7 @@ set(HEADERS
 	src/flatmeshnode.h
 	src/flatmeshgeometry.h
 	src/icon.h
+	src/haptics.h
 )
 
 set(controls
@@ -100,6 +102,7 @@ qt6_generate_wayland_protocol_client_sources(asteroidcontrolsplugin
 target_link_libraries(
     asteroidcontrolsplugin
     PRIVATE
+        Qt::DBus
         Qt::Qml
         Qt::Quick
         Qt::Svg
