@@ -8,6 +8,7 @@ set(SRC
 	src/haptics.cpp
 	src/rotaryinput.cpp
 	src/edgeeffect.cpp
+	src/framediagnostics.cpp
 )
 set(HEADERS
 	src/controls_plugin.h
@@ -20,6 +21,7 @@ set(HEADERS
 	src/haptics.h
 	src/rotaryinput.h
 	src/edgeeffect.h
+	src/framediagnostics.h
 )
 
 set(controls
@@ -111,6 +113,7 @@ target_link_libraries(
         Qt::Qml
         Qt::Quick
         Qt::QuickPrivate
+        Qt::QmlPrivate
         Qt::Svg
         Qt::WaylandClient
         Qt::GuiPrivate

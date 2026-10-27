@@ -17,6 +17,7 @@
 
 #include "controls_plugin.h"
 #include "rotaryinput.h"
+#include "framediagnostics.h"
 #include <QFont>
 #include <QGuiApplication>
 
@@ -27,4 +28,6 @@ void ControlsPlugin::initializeEngine(QQmlEngine *engine, const char *uri)
     QGuiApplication::setFont(QFont("Noto Sans"));
     /* The crown scrolls lists and pickers in every application */
     RotaryInput::install();
+    /* QT_LOGGING_RULES=asteroid.frames.debug=true: why each frame is drawn */
+    FrameDiagnostics::install();
 }
