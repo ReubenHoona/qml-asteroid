@@ -7,6 +7,7 @@ set(SRC
 	src/icon.cpp
 	src/haptics.cpp
 	src/rotaryinput.cpp
+	src/edgeeffect.cpp
 )
 set(HEADERS
 	src/controls_plugin.h
@@ -18,6 +19,7 @@ set(HEADERS
 	src/icon.h
 	src/haptics.h
 	src/rotaryinput.h
+	src/edgeeffect.h
 )
 
 set(controls

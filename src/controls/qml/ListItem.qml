@@ -65,6 +65,8 @@ import org.asteroid.utils
     \endqml
 */
 Item {
+    id: listItem
+
     /*! alias to recieve string label.text */
     property alias title: label.text
     /*! alias to recieve string icon.name */
@@ -75,14 +77,29 @@ Item {
     property int iconSize: height - Dims.h(6)
     /*! size of the label text */
     property int labelFontSize: Dims.l(9)
+    /*!
+        Shrink and fade the item near the top and bottom of a round screen
+        while it scrolls in a list, as Wear OS lists do (see \l EdgeEffect).
+    */
+    property alias edgeEffect: edge.enabled
+
     /*! forward the clicked() signal to parent */
     signal clicked()
 
     width: parent.width
     height: Dims.h(21)
 
+    EdgeEffect { id: edge; item: listItem }
+    transform: Scale {
+        origin.x: listItem.width / 2
+        origin.y: listItem.height / 2
+        xScale: edge.scale
+        yScale: edge.scale
+    }
+
     HighlightBar {
         id: highlight
+        opacity: edge.alpha
 
         onClicked: parent.clicked()
     }
@@ -90,6 +107,7 @@ Item {
     Icon {
         id: icon
 
+        opacity: edge.alpha
         width: iconSize
         height: width
 
@@ -103,6 +121,7 @@ Item {
     Label {
         id: label
 
+        opacity: edge.alpha
         anchors {
             leftMargin: DeviceSpecs.hasRoundScreen ? Dims.w(6) : Dims.w(10)
             left: icon.right

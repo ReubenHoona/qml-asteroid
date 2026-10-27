@@ -115,6 +115,11 @@ Item {
     /*! Base font size for label text */
     property int labelFontSize: Dims.l(6)
 
+    /*!
+        Shrink and fade the row near the top and bottom of a round screen
+        while it scrolls in a list, as Wear OS lists do (see \l EdgeEffect).
+    */
+    property alias edgeEffect: edge.enabled
     /*! Default width is parent width */
     width: parent.width
 
@@ -126,6 +131,14 @@ Item {
 
     signal clicked()
 
+    EdgeEffect { id: edge }
+    transform: Scale {
+        origin.x: width / 2
+        origin.y: height / 2
+        xScale: edge.scale
+        yScale: edge.scale
+    }
+
     Behavior on opacity {
         NumberAnimation {
             duration: 200
@@ -135,6 +148,7 @@ Item {
 
     Label {
         id: labelContainer
+        opacity: edge.alpha
         anchors {
             left: parent.left
             leftMargin: rowMargin
@@ -150,6 +164,7 @@ Item {
 
     Loader {
         id: actionLoader
+        opacity: edge.alpha
         anchors {
             right: parent.right
             rightMargin: actionComponent ? rowMargin - actionSlotPadding : 0
