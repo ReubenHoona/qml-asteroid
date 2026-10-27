@@ -140,12 +140,19 @@ Rectangle {
         }
     }
 
+    // Counts the seconds down only once started: a running binding on
+    // countdownSeconds ran it at creation too, and the hidden label it
+    // updated made the window draw a frame every second
     Timer {
         id: syncTimer
         interval: 1000
-        running: remorseTimer.countdownSeconds > 0
+        running: false
         repeat: true
-        onTriggered: remorseTimer.countdownSeconds--
+        onTriggered: {
+            remorseTimer.countdownSeconds--
+            if (remorseTimer.countdownSeconds <= 0)
+                stop()
+        }
     }
 
     // Content is sized against a centered square (the shorter screen edge)
@@ -256,5 +263,6 @@ Rectangle {
         fadeAnimation.start();
         arcAnimation.start();
         timer.start();
+        syncTimer.restart();
     }
 }
