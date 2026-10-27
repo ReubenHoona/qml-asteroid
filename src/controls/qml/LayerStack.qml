@@ -104,15 +104,51 @@ Item {
         Row { id: content }
     }
 
+    /* Wear OS motion: Material 3 standard easing (0.2, 0, 0, 1) for a page
+     * coming in, LinearOutSlowIn (0, 0, 0.2, 1) over 200 ms for the swipe
+     * to dismiss settling (androidx wear compose SwipeToDismissBox) */
+    readonly property var _standardEasing: [0.2, 0, 0, 1, 1, 1]
+    readonly property var _settleEasing: [0, 0, 0.2, 1, 1, 1]
+
+    // The page on top shrinks a little while it is swiped away (Wear OS
+    // squeezes the page being dismissed) and grows into place when pushed
+    property real _enterScale: 1
+    readonly property real _swipeProgress: gestureArea.state === "swipe" && width > 0
+                                           ? Math.max(0, gestureArea.value) / width : 0
+    readonly property real _topScale: _enterScale * (1 - 0.15 * _swipeProgress)
+
+    Component {
+        id: layerScale
+        Scale {
+            property Item layer
+            origin.x: layer ? layer.width / 2 : 0
+            origin.y: layer ? layer.height / 2 : 0
+            xScale: layer && layer === layersStack.currentLayer ? layersStack._topScale : 1
+            yScale: xScale
+        }
+    }
+
     SequentialAnimation {
         id: pushAnim
 
-        NumberAnimation {
-            id: pushAnimX
-            target: contentArea
-            property: "contentX"
-            duration: 200
-            easing.type: Easing.OutQuint
+        ParallelAnimation {
+            NumberAnimation {
+                id: pushAnimX
+                target: contentArea
+                property: "contentX"
+                duration: 250
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: layersStack._standardEasing
+            }
+            NumberAnimation {
+                target: layersStack
+                property: "_enterScale"
+                from: 0.85
+                to: 1
+                duration: 250
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: layersStack._standardEasing
+            }
         }
 
         ScriptAction { script: if(win !== null) win.animIndicators() }
@@ -154,6 +190,7 @@ Item {
             var layer;
             params["pop"] = function() { layersStack.popAnim(); }
             layer = component.createObject(content, params);
+            layer.transform = [layerScale.createObject(layer, { layer: layer })]
             layers.push(layer);
             pushAnimX.to = layers.length*width
             pushAnim.start();
@@ -186,7 +223,8 @@ Item {
         enabled: layers.length > 0
         acceptsRight: true
 
-        property real swipeThreshold: 0.15
+        // Wear OS: a swipe dismisses past half the width, or a quick flick
+        property real swipeThreshold: 0.5
 
         onGestureStarted: (gesture) => {
             swipeAnimation.stop()
@@ -197,7 +235,7 @@ Item {
 
         onGestureFinished: (gesture) => {
             if (gesture == "right") {
-                if (gestureArea.progress >= swipeThreshold) {
+                if (gestureArea.progress >= swipeThreshold || gestureArea.flung) {
                     swipeAnimation.valueTo = width
                     swipeAnimation.start()
                 } else
@@ -230,7 +268,8 @@ Item {
                 property: "value"
                 to: 0
                 duration: 200
-                easing.type: Easing.OutQuint
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: layersStack._settleEasing
             }
 
             PropertyAction {
@@ -258,7 +297,8 @@ Item {
                 target: gestureArea
                 property: "value"
                 duration: 200
-                easing.type: Easing.OutQuint
+                easing.type: Easing.BezierSpline
+                easing.bezierCurve: layersStack._settleEasing
             }
 
             PropertyAction {

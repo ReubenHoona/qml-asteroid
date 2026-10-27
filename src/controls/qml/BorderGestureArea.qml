@@ -129,12 +129,38 @@ MouseArea {
     property string gesture
     property int value
     property int max
-    property real progress: Math.abs(value) / max
+    property real progress: max > 0 ? Math.abs(value) / max : 0
+    /*!
+        Speed of the finger along the gesture when it was lifted, in pixels
+        per second, positive in the direction of the gesture. Lets a quick
+        flick finish a gesture that did not travel far, as Wear OS's swipe
+        to dismiss does.
+     */
+    property real velocity: 0
+    /*!
+        True when a quick flick along the gesture ended it: the finger moved
+        at least \l flingVelocity pixels per second in the direction of the
+        gesture when it was lifted.
+     */
+    readonly property bool flung: velocity >= flingVelocity
+    /*!
+        Speed above which a gesture counts as \l flung, in pixels per second.
+        Defaults to 125 dp/s on a 192 dp wide watch.
+     */
+    property real flingVelocity: Math.min(width, height) / 192 * 125
     /*!
         True if gesture is left or right.
     */
     property bool horizontal: gesture === "left" || gesture === "right"
     property bool inverted: gesture === "left" || gesture === "up"
+    /*!
+        On a round screen the edges where a gesture starts follow the circle
+        of the display: a swipe from the left edge starts within
+        \l boundary of the visible left edge at that height, not of the
+        corner of the square around it, which is off the screen above and
+        below the middle.
+     */
+    property bool roundEdges: DeviceSpecs.hasRoundScreen && Math.abs(width - height) < 2
 
     /*!
         Tells the BorderGestureArea to accept right gestures.
@@ -156,18 +182,38 @@ MouseArea {
     // Internal
     property int _mouseStart
     property variant _gestures: ["down", "left", "up", "right"]
+    property real _lastPos
+    property real _lastTime
+    property real _speed
+
+    // Half the width of the circle inscribed in the area at height y (or
+    // half its height at x), 0 outside it
+    function _halfChord(offset, size) {
+        var r = size / 2
+        var d = offset - r
+        return d * d < r * r ? Math.sqrt(r * r - d * d) : 0
+    }
 
     onPressed: (mouse) => {
-        if (mouse.x < boundary && acceptsRight) {
+        var leftEdge = 0, rightEdge = width, topEdge = 0, bottomEdge = height
+        if (roundEdges) {
+            var hx = _halfChord(mouse.y, height)
+            var hy = _halfChord(mouse.x, width)
+            leftEdge = width / 2 - hx
+            rightEdge = width / 2 + hx
+            topEdge = height / 2 - hy
+            bottomEdge = height / 2 + hy
+        }
+        if (mouse.x - leftEdge < boundary && acceptsRight) {
             gesture = "right"
             max = width - mouse.x
-        } else if (width - mouse.x < boundary && acceptsLeft) {
+        } else if (rightEdge - mouse.x < boundary && acceptsLeft) {
             gesture = "left"
             max = mouse.x
-        } else if (mouse.y < boundary && acceptsDown) {
+        } else if (mouse.y - topEdge < boundary && acceptsDown) {
             gesture = "down"
             max = height - mouse.y
-        } else if (height - mouse.y < boundary && acceptsUp) {
+        } else if (bottomEdge - mouse.y < boundary && acceptsUp) {
             gesture = "up"
             max = mouse.y
         } else {
@@ -176,10 +222,14 @@ MouseArea {
         }
 
         value = 0
+        velocity = 0
+        _speed = 0
         if (horizontal)
             _mouseStart = mouse.x
         else
             _mouseStart = mouse.y
+        _lastPos = _mouseStart
+        _lastTime = Date.now()
 
         gestureStarted(gesture)
     }
@@ -187,6 +237,15 @@ MouseArea {
     onPositionChanged: (mouse) => {
         var p = horizontal ? mouse.x : mouse.y
         value = Math.max(Math.min(p - _mouseStart, max), -max)
+        // finger speed, smoothed over the last few moves
+        var now = Date.now()
+        var dt = now - _lastTime
+        if (dt > 0) {
+            var inst = (p - _lastPos) * 1000 / dt
+            _speed = dt > 100 ? inst : _speed * 0.4 + inst * 0.6
+            _lastPos = p
+            _lastTime = now
+        }
     }
 
     function reset() {
@@ -201,9 +260,11 @@ MouseArea {
     }
 
     onReleased: {
+        // a finger that stopped before lifting did not flick
+        var speed = Date.now() - _lastTime > 80 ? 0 : _speed
+        velocity = inverted ? -speed : speed
         gestureFinished(gesture)
         if (!delayReset)
             reset()
     }
 }
-
