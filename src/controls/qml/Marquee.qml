@@ -81,7 +81,9 @@ Item {
     function restartAnimation() {
         animation.start()
         animation.stop()
-        if(paused || animatedText.width <= container.width) return
+        // an invisible marquee (a page off screen) does not keep the
+        // animation driver, and so the CPU, busy
+        if(paused || !container.visible || animatedText.width <= container.width) return
             var scrollDuration = 1000 * animatedText.width / (speed * (container.width > 0 ? container.width : 1))
             animHold.from = originX()
             animHold.to = originX()
@@ -95,6 +97,7 @@ Item {
     }
 
     onWidthChanged: restartAnimation()
+    onVisibleChanged: restartAnimation()
     onPausedChanged: restartAnimation()
     onSpeedChanged: restartAnimation()
     implicitHeight: animatedText.contentHeight
