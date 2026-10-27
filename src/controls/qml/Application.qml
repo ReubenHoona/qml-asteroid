@@ -17,6 +17,7 @@
  */
 
 import QtQuick
+import Nemo.Configuration
 import org.asteroid.controls
 import org.asteroid.utils
 
@@ -78,6 +79,24 @@ Application_p {
         id: fm
         anchors.fill: parent
         anchors.bottomMargin: -DeviceSpecs.flatTireHeight
+    }
+
+    /*!
+        Show the time at the top of the screen, curved along its edge, as
+        Wear OS does in its applications (\l TimeText). Defaults to the
+        dconf key /org/asteroidos/ux/time-text (false).
+    */
+    property bool showTime: _timeTextSetting.value
+
+    ConfigurationValue {
+        id: _timeTextSetting
+        key: "/org/asteroidos/ux/time-text"
+        defaultValue: false
+    }
+
+    TimeText {
+        visible: showTime
+        z: 11
     }
 
     /*!
