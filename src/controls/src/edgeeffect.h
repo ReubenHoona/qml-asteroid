@@ -69,6 +69,7 @@ signals:
 private slots:
     void findFlickable();
     void update();
+    void updateContentHeight();
 
 private:
     QPointer<QQuickItem> m_item;
@@ -79,6 +80,9 @@ private:
     bool m_complete = false;
     qreal m_scale = 1;
     qreal m_alpha = 1;
+    /* the flickable's content height with its margins, read when it
+     * changes, not on every scrolled pixel */
+    qreal m_contentH = 0;
     QEasingCurve m_curve;
 };
 

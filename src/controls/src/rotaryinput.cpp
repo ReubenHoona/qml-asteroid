@@ -6,6 +6,7 @@
 #include "rotaryinput.h"
 #include "haptics.h"
 
+#include <QAbstractAnimation>
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QLoggingCategory>
@@ -49,6 +50,24 @@ static const char KEY_PX[] = "/org/asteroidos/ux/rotary-px-per-count";
 static const char KEY_DETENT[] = "/org/asteroidos/ux/rotary-counts-per-detent";
 static const char KEY_INDICATOR[] = "/org/asteroidos/ux/position-indicator";
 
+class RotaryFrames : public QAbstractAnimation
+{
+public:
+    explicit RotaryFrames(RotaryInput *r) : QAbstractAnimation(r), m_rotary(r) { }
+    int duration() const override { return -1; }
+
+protected:
+    void updateCurrentTime(int t) override
+    {
+        const int dt = t - m_rotary->m_frameTime;
+        m_rotary->m_frameTime = t;
+        m_rotary->animate(qBound(1, dt, 100));
+    }
+
+private:
+    RotaryInput *m_rotary;
+};
+
 void RotaryInput::install()
 {
     static RotaryInput *s = nullptr;
@@ -68,8 +87,20 @@ RotaryInput::RotaryInput(QObject *parent) : QObject(parent),
     for (MDConfItem *item : {m_enabled, m_invert, m_pxPerCount, m_countsPerDetent, m_indicatorEnabled})
         connect(item, &MDConfItem::valueChanged, this, &RotaryInput::readSettings);
     readSettings();
-    m_frame.setInterval(16);
-    connect(&m_frame, &QTimer::timeout, this, &RotaryInput::animate);
+    m_frame = new RotaryFrames(this);
+}
+
+bool RotaryInput::gliding() const
+{
+    return m_frame->state() == QAbstractAnimation::Running;
+}
+
+void RotaryInput::startGlide()
+{
+    if (gliding())
+        return;
+    m_frameTime = 0;
+    m_frame->start();
 }
 
 void RotaryInput::readSettings()
@@ -129,7 +160,7 @@ void RotaryInput::notePress(QQuickWindow *window, const QPointF &pos)
     m_pressPos = pos;
     m_pressTime.start();
     /* a finger takes over from a crown scroll still gliding */
-    m_frame.stop();
+    m_frame->stop();
     /* the next crown event looks the target up again, under this touch */
     m_lastEvent.invalidate();
     /* show the indicator while a finger scrolls a list, as Wear OS does */
@@ -275,7 +306,7 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
             return false;
         }
         if (m_target != t || m_kind != kind) {
-            m_frame.stop();
+            m_frame->stop();
             m_pending = 0;
         }
         m_target = t;
@@ -359,7 +390,7 @@ void RotaryInput::scrollFree(qreal forward)
     const qreal gain = 1 + (MAX_GAIN - 1) * fast * fast * (3 - 2 * fast);
 
     const qreal current = f->property(posName(m_horizontal)).toReal();
-    if (!m_frame.isActive()) {
+    if (!gliding()) {
         /* starting from rest: stop a finger fling first */
         QMetaObject::invokeMethod(f, "cancelFlick");
         m_goal = current;
@@ -376,20 +407,18 @@ void RotaryInput::scrollFree(qreal forward)
     }
     if (m_indicatorOn && !m_horizontal)
         showIndicator(f, true);
-    if (!m_frame.isActive()) {
-        m_frameClock.start();
-        m_frame.start();
+    if (!gliding()) {
+        startGlide();
     }
 }
 
-void RotaryInput::animate()
+void RotaryInput::animate(qreal dt)
 {
     QQuickItem *f = m_target;
     if (!f || m_kind == None) {
-        m_frame.stop();
+        m_frame->stop();
         return;
     }
-    const qreal dt = qMax<qint64>(1, m_frameClock.restart());
     const qreal current = f->property(posName(m_horizontal)).toReal();
     const qreal k = 1 - qExp(-dt / SMOOTHING_MS);
     qreal next = current + (m_goal - current) * k;
@@ -406,7 +435,7 @@ void RotaryInput::animate()
                 * qFloor(qAbs(next - m_lastTickPos) / tick);
     }
     if (done) {
-        m_frame.stop();
+        m_frame->stop();
         if (m_kind == Snap)
             m_pending = 0;
     }
@@ -431,7 +460,7 @@ void RotaryInput::stepSnap(int steps)
     /* SnapToItem / SnapOneItem without a highlight range: glide to the
      * start of the item `steps` away from the one at the start of the view */
     const bool horizontal = m_horizontal;
-    const qreal pos = m_frame.isActive() ? m_goal : v->property(posName(horizontal)).toReal();
+    const qreal pos = gliding() ? m_goal : v->property(posName(horizontal)).toReal();
     const qreal probeX = horizontal ? pos + 1 : v->property("contentX").toReal() + v->width() / 2;
     const qreal probeY = horizontal ? v->property("contentY").toReal() + v->height() / 2 : pos + 1;
     int index = -1;
@@ -453,7 +482,7 @@ void RotaryInput::stepSnap(int steps)
         Haptics::instance()->tick();
         return;
     }
-    if (!m_frame.isActive()) {
+    if (!gliding()) {
         QMetaObject::invokeMethod(v, "cancelFlick");
         m_lastTickPos = v->property(posName(horizontal)).toReal();
     }
@@ -461,9 +490,8 @@ void RotaryInput::stepSnap(int steps)
     /* one tick per item, from stepSnap, not from the travel */
     Haptics::instance()->tick();
     m_lastTickPos = m_goal;
-    if (!m_frame.isActive()) {
-        m_frameClock.start();
-        m_frame.start();
+    if (!gliding()) {
+        startGlide();
     }
 }
 

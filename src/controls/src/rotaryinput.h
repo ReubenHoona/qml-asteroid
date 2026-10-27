@@ -53,6 +53,8 @@ class MDConfItem;
  *   /org/asteroidos/ux/position-indicator         bool, default true
  * QT_LOGGING_RULES="asteroid.rotary.debug=true" logs every event.
  */
+class QAbstractAnimation;
+
 class RotaryInput : public QObject
 {
     Q_OBJECT
@@ -76,7 +78,10 @@ private:
     static bool scrollsHorizontally(QQuickItem *item);
     void scrollFree(qreal counts);
     void stepSnap(int steps);
-    void animate();
+    void animate(qreal dt);
+    bool gliding() const;
+    void startGlide();
+    friend class RotaryFrames;
     void showIndicator(QQuickItem *flickable, bool flash);
     void readSettings();
 
@@ -92,8 +97,10 @@ private:
     /* free scrolling */
     qreal m_goal = 0;            /* where the content is heading */
     qreal m_lastTickPos = 0;     /* content position of the last tick */
-    QTimer m_frame;
-    QElapsedTimer m_frameClock;
+    /* driven by Qt Quick's animation driver: one step per frame, in step
+     * with the display (a 16 ms timer beats against the 16.7 ms vsync) */
+    QAbstractAnimation *m_frame = nullptr;
+    int m_frameTime = 0;
     QElapsedTimer m_lastEvent;
     qreal m_speed = 0;           /* smoothed counts per second */
 

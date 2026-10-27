@@ -88,7 +88,9 @@ void EdgeEffect::findFlickable()
     }
     if (found) {
         m_connections << connect(found, SIGNAL(contentYChanged()), this, SLOT(update()));
-        m_connections << connect(found, SIGNAL(contentHeightChanged()), this, SLOT(update()));
+        m_connections << connect(found, SIGNAL(contentHeightChanged()), this, SLOT(updateContentHeight()));
+        m_connections << connect(found, SIGNAL(topMarginChanged()), this, SLOT(updateContentHeight()));
+        m_connections << connect(found, SIGNAL(bottomMarginChanged()), this, SLOT(updateContentHeight()));
         m_connections << connect(found, &QQuickItem::heightChanged, this, &EdgeEffect::update);
         m_connections << connect(m_item, &QQuickItem::yChanged, this, &EdgeEffect::update);
         m_connections << connect(m_item, &QQuickItem::heightChanged, this, &EdgeEffect::update);
@@ -97,6 +99,15 @@ void EdgeEffect::findFlickable()
         m_flickable = found;
         emit flickableChanged();
     }
+    updateContentHeight();
+}
+
+void EdgeEffect::updateContentHeight()
+{
+    QQuickItem *f = m_flickable;
+    m_contentH = f ? f->property("contentHeight").toReal() + f->property("topMargin").toReal()
+                     + f->property("bottomMargin").toReal()
+                   : 0;
     update();
 }
 
@@ -107,9 +118,7 @@ void EdgeEffect::update()
     QQuickItem *f = m_flickable;
     if (m_enabled && m_item && f && f->height() > 0) {
         const qreal viewH = f->height();
-        const qreal contentH = f->property("contentHeight").toReal()
-                + f->property("topMargin").toReal() + f->property("bottomMargin").toReal();
-        if (contentH > viewH + 1) {
+        if (m_contentH > viewH + 1) {
             const qreal h = m_item->height() * m_item->scale();
             const qreal center = m_item->mapToItem(f, QPointF(0, m_item->height() / 2)).y();
             const qreal heightFraction = qBound<qreal>(0, (h / viewH - MIN_ELEMENT_HEIGHT)
