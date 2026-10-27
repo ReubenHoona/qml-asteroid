@@ -9,6 +9,7 @@ set(SRC
 	src/rotaryinput.cpp
 	src/edgeeffect.cpp
 	src/framediagnostics.cpp
+	src/backswipearea.cpp
 )
 set(HEADERS
 	src/controls_plugin.h
@@ -22,12 +23,15 @@ set(HEADERS
 	src/rotaryinput.h
 	src/edgeeffect.h
 	src/framediagnostics.h
+	src/backswipearea.h
 )
 
 set(controls
         Application
+        ArcPageIndicator
         BorderGestureArea
         CircularSpinner
+        Confirmation
         Dims
         HandWritingKeyboard
         HighlightBar
@@ -56,6 +60,7 @@ set(controls
         TextArea
         TextBase
         TextField
+        TimeText
         ValueMeter
 )
 

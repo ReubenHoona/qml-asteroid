@@ -17,6 +17,7 @@
  */
 
 import QtQuick
+import org.asteroid.controls
 
 
 /*!
@@ -96,12 +97,104 @@ Item {
     property var firstPageItem
     /*! Can be set to null if you don't want indicators animations and systemgestures override. If your LayerStack isn't directly a child element of your window, you can also specify the window via this parameter. */
     property QtObject win: parent  
+    /*! False keeps the back swipe from popping the top page, for example while a stack inside that page has pages of its own to go back from first */
+    property bool gesturesEnabled: true
 
-    Flickable {
-        id: contentArea
+    /*! True: go back only with a swipe from the left edge; false (the default): with a swipe right from anywhere, as Wear OS's SwipeToDismissBox, unless what is under the finger scrolls horizontally (see \l BackSwipeArea) */
+    property bool edgeSwipeOnly: false
+
+    // The pages sit inside the back swipe area: it watches their touches
+    // and takes a drag over once it clearly goes right
+    BackSwipeArea {
+        id: gestureArea
         anchors.fill: parent
-        interactive: false
-        Row { id: content }
+        swipeEnabled: layers.length > 0 && layersStack.gesturesEnabled
+        edgeOnly: layersStack.edgeSwipeOnly
+
+        // Wear OS: a swipe dismisses past half the width, or a quick flick
+        property real swipeThreshold: 0.5
+
+        onStarted: {
+            swipeAnimation.stop()
+            cancelAnimation.stop()
+            state = "swipe"
+        }
+
+        onFinished: {
+            if (gestureArea.progress >= swipeThreshold || gestureArea.flung) {
+                swipeAnimation.valueTo = width
+                swipeAnimation.start()
+            } else
+                cancelAnimation.start()
+        }
+
+        states: [
+            State {
+                name: "swipe"
+
+                PropertyChanges {
+                    target: contentArea
+                    contentX: layers.length*width - gestureArea.value
+                }
+            }
+        ]
+
+        Flickable {
+            id: contentArea
+            anchors.fill: parent
+            interactive: false
+            Row { id: content }
+        }
+    }
+
+    SequentialAnimation {
+        id: cancelAnimation
+
+        NumberAnimation {
+            target: gestureArea
+            property: "value"
+            to: 0
+            duration: 200
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: layersStack._settleEasing
+        }
+
+        PropertyAction {
+            target: gestureArea
+            property: "state"
+            value: ""
+        }
+
+        ScriptAction { script: { gestureArea.reset(); if(win !== null) win.animIndicators() } }
+    }
+
+    SequentialAnimation {
+        id: swipeAnimation
+
+        property alias valueTo: valueAnimation.to
+
+        PropertyAction {
+            target: gestureArea
+            property: "state"
+            value: "swipe"
+        }
+
+        NumberAnimation {
+            id: valueAnimation
+            target: gestureArea
+            property: "value"
+            duration: 200
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: layersStack._settleEasing
+        }
+
+        PropertyAction {
+            target: gestureArea
+            property: "state"
+            value: ""
+        }
+
+        ScriptAction { script: { gestureArea.reset(); pop(currentLayer) } }
     }
 
     /* Wear OS motion: Material 3 standard easing (0.2, 0, 0, 1) for a page
@@ -215,99 +308,5 @@ Item {
         layersChanged();
         if(win !== null)
             win.animIndicators()
-    }
-
-    BorderGestureArea {
-        id: gestureArea
-        anchors.fill: parent
-        enabled: layers.length > 0
-        acceptsRight: true
-
-        // Wear OS: a swipe dismisses past half the width, or a quick flick
-        property real swipeThreshold: 0.5
-
-        onGestureStarted: (gesture) => {
-            swipeAnimation.stop()
-            cancelAnimation.stop()
-            if (gesture == "right")
-                state = "swipe"
-        }
-
-        onGestureFinished: (gesture) => {
-            if (gesture == "right") {
-                if (gestureArea.progress >= swipeThreshold || gestureArea.flung) {
-                    swipeAnimation.valueTo = width
-                    swipeAnimation.start()
-                } else
-                    cancelAnimation.start()
-            } else
-                cancelAnimation.start()
-        }
-
-        states: [
-            State {
-                name: "swipe"
-
-                PropertyChanges {
-                    target: gestureArea
-                    delayReset: true
-                }
-
-                PropertyChanges {
-                    target: contentArea
-                    contentX: layers.length*width - gestureArea.value
-                }
-            }
-        ]
-
-        SequentialAnimation {
-            id: cancelAnimation
-
-            NumberAnimation {
-                target: gestureArea
-                property: "value"
-                to: 0
-                duration: 200
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: layersStack._settleEasing
-            }
-
-            PropertyAction {
-                target: gestureArea
-                property: "state"
-                value: ""
-            }
-
-            ScriptAction { script: if(win !== null) win.animIndicators() }
-        }
-
-        SequentialAnimation {
-            id: swipeAnimation
-
-            property alias valueTo: valueAnimation.to
-
-            PropertyAction {
-                target: gestureArea
-                property: "state"
-                value: "swipe"
-            }
-
-            NumberAnimation {
-                id: valueAnimation
-                target: gestureArea
-                property: "value"
-                duration: 200
-                easing.type: Easing.BezierSpline
-                easing.bezierCurve: layersStack._settleEasing
-            }
-
-            PropertyAction {
-                target: gestureArea
-                property: "state"
-                value: ""
-            }
-
-            ScriptAction { script: pop(currentLayer) }
-        }
     }
 }
