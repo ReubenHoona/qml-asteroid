@@ -5,7 +5,10 @@
 
 #include "framediagnostics.h"
 
+#include <QAbstractEventDispatcher>
 #include <QCoreApplication>
+#include <QMetaEnum>
+#include <QThread>
 #include <QElapsedTimer>
 #include <QGuiApplication>
 #include <QFileInfo>
@@ -148,8 +151,58 @@ void FrameDiagnostics::install()
             hook(qw);
 }
 
+static const qint64 BUSY_MS = 12;
+static const int MAX_SEEN = 24;
+
 FrameDiagnostics::FrameDiagnostics(QObject *parent) : QObject(parent)
 {
+    m_clock.start();
+    if (QAbstractEventDispatcher *d = QAbstractEventDispatcher::instance(qApp->thread())) {
+        connect(d, &QAbstractEventDispatcher::awake, this, &FrameDiagnostics::awake, Qt::DirectConnection);
+        connect(d, &QAbstractEventDispatcher::aboutToBlock, this, &FrameDiagnostics::aboutToBlock, Qt::DirectConnection);
+    }
+}
+
+void FrameDiagnostics::awake()
+{
+    m_awakeAt = m_clock.elapsed();
+    m_seen.clear();
+}
+
+void FrameDiagnostics::aboutToBlock()
+{
+    if (m_awakeAt < 0)
+        return;
+    const qint64 now = m_clock.elapsed();
+    const qint64 busy = now - m_awakeAt;
+    m_awakeAt = -1;
+    if (busy < BUSY_MS)
+        return;
+    QString out;
+    for (int i = 0; i < m_seen.size(); i++) {
+        const qint64 next = i + 1 < m_seen.size() ? m_seen.at(i + 1).at : now;
+        out += QStringLiteral(" %1 %2").arg(m_seen.at(i).what).arg(next - m_seen.at(i).at);
+    }
+    qCDebug(lcFrames).noquote() << QStringLiteral("gui busy %1:%2").arg(busy).arg(out);
+}
+
+static QString receiverName(QObject *o)
+{
+    QString s = QString::fromLatin1(o->metaObject()->className());
+    const int q = s.indexOf(QLatin1String("_QMLTYPE_"));
+    if (q > 0)
+        s.truncate(q);
+    if (QQmlContext *ctx = qmlContext(o)) {
+        const QString id = ctx->nameForObject(o);
+        if (!id.isEmpty())
+            s += QLatin1Char('#') + id;
+        const QString file = QFileInfo(ctx->baseUrl().path()).fileName();
+        if (!file.isEmpty())
+            s += QLatin1Char('@') + file;
+    } else if (!o->objectName().isEmpty()) {
+        s += QLatin1Char('(') + o->objectName() + QLatin1Char(')');
+    }
+    return s;
 }
 
 bool FrameDiagnostics::eventFilter(QObject *watched, QEvent *event)
@@ -157,6 +210,12 @@ bool FrameDiagnostics::eventFilter(QObject *watched, QEvent *event)
     if (event->type() == QEvent::Show || event->type() == QEvent::Expose) {
         if (QQuickWindow *w = qobject_cast<QQuickWindow *>(watched))
             hook(w);
+    }
+    if (m_awakeAt >= 0 && m_seen.size() < MAX_SEEN && QThread::currentThread() == qApp->thread()) {
+        static const QMetaEnum types = QMetaEnum::fromType<QEvent::Type>();
+        const char *type = types.valueToKey(event->type());
+        m_seen.append({ m_clock.elapsed(), QString::fromLatin1(type ? type : "Event")
+                        + QLatin1Char('>') + receiverName(watched) });
     }
     return QObject::eventFilter(watched, event);
 }

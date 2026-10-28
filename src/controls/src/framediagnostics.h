@@ -18,7 +18,10 @@
 #ifndef FRAMEDIAGNOSTICS_H
 #define FRAMEDIAGNOSTICS_H
 
+#include <QElapsedTimer>
 #include <QObject>
+#include <QStringList>
+#include <QVector>
 
 /*
  * Why does this screen draw? A debugging aid for "no frame on a static
@@ -37,6 +40,12 @@
  * frame with no dirty item comes from a running animation or an explicit
  * update(). Only the first 10 items are named.
  * The cost is a few clock reads per frame and walking the dirty list.
+ *
+ * It also times the user interface thread between two waits of its event
+ * loop: a stretch over 12 ms (work outside any frame: an input or D-Bus
+ * handler, a Loader, a timer) is logged as
+ *   gui busy <ms>: <event> <receiver> <ms> ...
+ * with the events handled in it and how long after each the next came.
  */
 class FrameDiagnostics : public QObject
 {
@@ -50,6 +59,13 @@ protected:
 
 private:
     explicit FrameDiagnostics(QObject *parent);
+    void awake();
+    void aboutToBlock();
+
+    QElapsedTimer m_clock;
+    qint64 m_awakeAt = -1;
+    struct Seen { qint64 at; QString what; };
+    QVector<Seen> m_seen;
 };
 
 #endif // FRAMEDIAGNOSTICS_H
