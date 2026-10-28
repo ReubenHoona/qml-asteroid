@@ -354,13 +354,30 @@ FocusScope {
         iface: "org.asteroidos.assistant"
         signalsEnabled: kb._dictating
 
-        // the signals Partial and Result (Nemo.DBus: the name, lower case first)
-        function partial(session, text) {
-            if (kb._dictating && (kb._session === 0 || session === kb._session))
+        // the signals StateChanged, Partial and Result (Nemo.DBus: the
+        // name, lower case first). Only this keyboard's session: the one
+        // whose "starting" comes while Dictate() has not returned (the
+        // daemon emits it first), else the one Dictate() returns. Starting
+        // a session ends the one going on with that session's "idle": a
+        // Partial or Result of another client's session is not ours.
+        function stateChanged(session: int, state: string) {
+            if (!kb._dictating)
+                return
+            if (kb._session === 0 && state === "starting") {
+                kb._session = session
+            } else if (session === kb._session && state === "idle") {
+                // dropped without a Result (the assistant overlay or a
+                // voice reply took the microphone): nothing more comes
+                kb._dictating = false
+                kb._partial = ""
+            }
+        }
+        function partial(session: int, text: string) {
+            if (kb._dictating && kb._session !== 0 && session === kb._session)
                 kb._partial = text
         }
-        function result(session, json) {
-            if (!kb._dictating || (kb._session !== 0 && session !== kb._session))
+        function result(session: int, json: string) {
+            if (!kb._dictating || kb._session === 0 || session !== kb._session)
                 return
             var r = {}
             try { r = JSON.parse(json) } catch (e) { }
@@ -383,10 +400,14 @@ FocusScope {
         _session = 0
         _dictating = true
         assistant.typedCall("Dictate", [{ "type": "s", "value": "" }], function (session) {
-            if (typeof session === "number" && session > 0)
-                kb._session = session
-            else if (session === 0)
+            if (!kb._dictating)
+                return
+            if (typeof session === "number" && session > 0) {
+                if (kb._session === 0)
+                    kb._session = session
+            } else if (session === 0) {
                 kb._dictating = false
+            }
         }, function () { kb._dictating = false })
     }
     function cancelDictation() {
