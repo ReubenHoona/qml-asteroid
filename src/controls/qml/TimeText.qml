@@ -80,13 +80,16 @@ Item {
         return mids
     }
 
+    // a fixed number of letters ("12:59 PM" is 8): a new minute changes
+    // their text, the Repeater does not make them again
     Repeater {
-        model: timeText._chars.length
+        model: 8
         delegate: Text {
+            visible: index < timeText._chars.length
             readonly property real along: timeText._layout[index] !== undefined ? timeText._layout[index] : 0
             // radians from the top of the circle; straight on a square screen
             readonly property real angle: DeviceSpecs.hasRoundScreen && timeText._radius > 0 ? along / timeText._radius : 0
-            text: timeText._chars[index]
+            text: index < timeText._chars.length ? timeText._chars[index] : ""
             color: timeText.color
             font.pixelSize: timeText.pixelSize
             font.styleName: "SemiCondensed Medium"
