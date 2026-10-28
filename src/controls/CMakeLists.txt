@@ -86,11 +86,6 @@ target_include_directories(asteroidcontrolsplugin PRIVATE src)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MLITE6 REQUIRED IMPORTED_TARGET mlite6)
 
-qt_add_shaders(
-    asteroidcontrolsplugin "asteroidcontrolsplugin_shaders"
-    PREFIX "/org/asteroid/controls"
-    FILES "qml/spinnerfade.frag"
-)
 
 set(controls-docs "$<LIST:TRANSFORM,$<LIST:TRANSFORM,$<LOWER_CASE:${controls}>,PREPEND,qml->,APPEND,.html>")
 set(doc-dir "${CMAKE_BINARY_DIR}/doc/html")

@@ -104,8 +104,17 @@ Label {
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
 
-    opacity: isCurr ? 1.0 : 0.6
+    // The fade at the top and bottom fifth of the spinner, from where the
+    // item sits (it was a shader over an offscreen copy of the whole
+    // spinner, drawn again on every frame it moved)
+    readonly property Item _view: isCircularSpinner ? PathView.view : ListView.view
+    readonly property real _centre: !_view ? 0.5
+        : isCircularSpinner ? (y + height / 2) / Math.max(1, _view.height)
+        : (y - _view.contentY + height / 2) / Math.max(1, _view.height)
+    readonly property real _fade: Math.max(0, Math.min(1, Math.min(_centre, 1 - _centre) * 5))
+    property real _focusOpacity: isCurr ? 1.0 : 0.6
+    opacity: _focusOpacity * _fade
     scale: isCurr ? 1.4 : 0.8
     Behavior on scale   { NumberAnimation { duration: 200 } }
-    Behavior on opacity { NumberAnimation { duration: 200 } }
+    Behavior on _focusOpacity { NumberAnimation { duration: 200 } }
 }

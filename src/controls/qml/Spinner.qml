@@ -70,8 +70,4 @@ ListView {
         visible: false
     }
 
-    layer.enabled: true
-    layer.effect: ShaderEffect {
-        fragmentShader: "spinnerfade.frag.qsb"
-    }
 }
