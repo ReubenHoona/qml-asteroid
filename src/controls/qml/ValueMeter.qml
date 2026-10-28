@@ -118,6 +118,40 @@ Item {
     */
     property color fillColor: Qt.rgba(1, 1, 1, 0.3)
 
+    /*!
+        \qmlproperty int ValueMeter::animationDuration
+        When above 0, the wave and the particles play for this many
+        milliseconds when the meter shows or isIncreasing changes, and then
+        stop, so a still screen with the meter on it draws nothing. 0 (the
+        default): they play for as long as the meter is visible.
+    */
+    property int animationDuration: 0
+
+    /*!
+        \qmlproperty bool ValueMeter::animating
+        True while the wave or the particles move.
+    */
+    readonly property bool animating: animationDuration > 0 ? _burst.running || waveAnimation.running
+                                                            : enableAnimations && fill.isVisible
+    readonly property int _waves: Math.max(1, Math.round(animationDuration / 1500))
+
+    // A one-shot: the particles come for the duration (less their shortest
+    // life), the last ones live out their shortened lives in its last part
+    Timer {
+        id: _burst
+        interval: valueMeter.animationDuration
+    }
+    property real _burstStart: 0
+    function _startBurst() {
+        if (animationDuration <= 0 || !enableAnimations || !fill.isVisible)
+            return
+        _burstStart = Date.now()
+        _burst.restart()
+        if (isIncreasing)
+            waveAnimation.restart()
+    }
+    onIsIncreasingChanged: _startBurst()
+
     Rectangle {
         id: outline
         anchors.fill: parent
@@ -150,15 +184,26 @@ Item {
         // hidden (the launcher hides its quick panel when the user leaves
         // it): every hidden move still made the window draw a frame. They
         // go with the meter.
-        onIsVisibleChanged: if (!isVisible) particleContainer.clear()
+        onIsVisibleChanged: {
+            if (!isVisible) {
+                particleContainer.clear()
+                _burst.stop()
+                waveAnimation.stop()
+            } else {
+                valueMeter._startBurst()
+            }
+        }
 
+        // in a one-shot it runs whole waves (ending where it started, at
+        // sin 0: the fill comes to rest at its value without a jump)
         NumberAnimation on waveTime {
             id: waveAnimation
-            running: isIncreasing && enableAnimations && fill.isVisible
+            running: valueMeter.animationDuration <= 0 && isIncreasing && enableAnimations && fill.isVisible
             from: 0
             to: 2 * Math.PI
-            duration: 1500
-            loops: Animation.Infinite
+            // whole waves that end with the show
+            duration: valueMeter.animationDuration <= 0 ? 1500 : valueMeter.animationDuration / valueMeter._waves
+            loops: valueMeter.animationDuration <= 0 ? Animation.Infinite : valueMeter._waves
         }
 
         Item {
@@ -189,7 +234,14 @@ Item {
 
                 const speed = isIncreasing ? 60 : 20
                 const pathLength = isIncreasing ? fill.width / 2 : fill.width
-                const lifetime = isIncreasing ? 2500 : 8500
+                let lifetime = isIncreasing ? 2500 : 8500
+                if (valueMeter.animationDuration > 0) {
+                    // a one-shot: every particle is gone when it ends
+                    const left = valueMeter.animationDuration - (Date.now() - valueMeter._burstStart)
+                    if (left < 400)
+                        return
+                    lifetime = Math.min(lifetime, left)
+                }
                 const maxSize = fill.height / 2
                 const minSize = fill.height / 6
                 const isLogoOrFlash = particleDesign === "logos" || particleDesign === "flashes"
@@ -238,6 +290,7 @@ Item {
                 id: particleTimer
                 interval: particleContainer.spawnInterval
                 running: fill.width > 0 && enableAnimations && particleContainer.visible && fill.isVisible
+                         && (valueMeter.animationDuration <= 0 || _burst.running)
                 repeat: true
                 triggeredOnStart: true
                 onTriggered: {
