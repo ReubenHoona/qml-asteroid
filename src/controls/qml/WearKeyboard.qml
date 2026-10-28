@@ -214,7 +214,14 @@ FocusScope {
         _capitalizeNext()
         if (dictationAllowed)
             dbusDaemon.typedCall("ListActivatableNames", [], function (names) {
-                kb._dictationAvailable = Array.isArray(names) && names.indexOf("org.asteroidos.assistant") >= 0
+                // Nemo.DBus hands a string list over as an array-like
+                // sequence, not an Array: look through it by index
+                var found = false
+                for (var i = 0; names && i < names.length; i++) {
+                    if (String(names[i]) === "org.asteroidos.assistant")
+                        found = true
+                }
+                kb._dictationAvailable = found
             })
     }
 
