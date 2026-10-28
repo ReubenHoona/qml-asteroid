@@ -81,6 +81,9 @@ protected:
 
 private:
     bool press(const QPointF &scenePos);
+    /* the touch point followed (see backswipearea.cpp) */
+    const QEventPoint *followedPoint(QTouchEvent *event) const;
+    bool pressPoint(const QTouchEvent *event, const QEventPoint &point);
     /* true when the drag is ours from now on */
     bool move(const QPointF &scenePos);
     void release(const QPointF &scenePos);
@@ -89,6 +92,11 @@ private:
 
     bool m_tracking = false;
     bool m_active = false;
+    /* the finger of this swipe is down (m_active stays set after the lift,
+     * until reset(), while the swipe animates out) */
+    bool m_down = false;
+    int m_pointId = -1;
+    quint64 m_pressTime = 0;
     bool m_edgeOnly = false;
     bool m_swipeEnabled = true;
     QPointF m_start;

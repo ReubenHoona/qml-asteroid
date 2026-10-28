@@ -176,6 +176,7 @@ bool BackSwipeArea::blockedAt(const QPointF &scenePos) const
 
 bool BackSwipeArea::press(const QPointF &scenePos)
 {
+    m_down = true;
     m_tracking = m_swipeEnabled && isEnabled() && isVisible() && startAllowed(scenePos) && !blockedAt(scenePos);
     m_start = scenePos;
     m_lastX = scenePos.x();
@@ -223,7 +224,9 @@ bool BackSwipeArea::move(const QPointF &scenePos)
 void BackSwipeArea::release(const QPointF &scenePos)
 {
     Q_UNUSED(scenePos)
-    const bool was = m_active;
+    // once per swipe: the grab is let go after the lift as well
+    const bool was = m_active && m_down;
+    m_down = false;
     m_tracking = false;
     setKeepTouchGrab(false);
     setKeepMouseGrab(false);
@@ -232,6 +235,32 @@ void BackSwipeArea::release(const QPointF &scenePos)
     m_velocity = m_lastTime.elapsed() > 80 ? 0 : m_speed;
     emit velocityChanged();
     emit finished();
+}
+
+/* A swipe follows one touch point: the one pressed last. Other points in
+ * an event are left alone: Qt's evdevtouch keeps a contact whose lift it
+ * missed (it does not resync after the kernel drops events) in every later
+ * event as a stationary point, and refusing every event with more than one
+ * point ended back swipes for good. A new press while a swipe is going on
+ * (its lift never came) ends that swipe. */
+const QEventPoint *BackSwipeArea::followedPoint(QTouchEvent *event) const
+{
+    for (qsizetype i = 0; i < event->pointCount(); ++i) {
+        if (event->point(i).state() == QEventPoint::State::Pressed)
+            return &event->point(i);
+    }
+    return m_pointId >= 0 ? event->pointById(m_pointId) : nullptr;
+}
+
+bool BackSwipeArea::pressPoint(const QTouchEvent *event, const QEventPoint &point)
+{
+    // the same press is filtered once for each child it is offered to
+    const bool newPress = event->timestamp() != m_pressTime || point.id() != m_pointId;
+    if (newPress && m_down)
+        release(QPointF());
+    m_pointId = point.id();
+    m_pressTime = event->timestamp();
+    return press(point.scenePosition());
 }
 
 bool BackSwipeArea::childMouseEventFilter(QQuickItem *item, QEvent *event)
@@ -245,11 +274,12 @@ bool BackSwipeArea::childMouseEventFilter(QQuickItem *item, QEvent *event)
     case QEvent::TouchUpdate:
     case QEvent::TouchEnd: {
         QTouchEvent *te = static_cast<QTouchEvent *>(event);
-        if (te->pointCount() != 1)
+        const QEventPoint *followed = followedPoint(te);
+        if (!followed)
             return false;
-        const QEventPoint &pt = te->points().first();
+        const QEventPoint &pt = *followed;
         if (pt.state() == QEventPoint::State::Pressed) {
-            press(pt.scenePosition());
+            pressPoint(te, pt);
         } else if (pt.state() == QEventPoint::State::Updated) {
             // a slider that keeps its drag (IntSelector sets preventStealing
             // once it moves sideways) is not ours to take
@@ -267,8 +297,10 @@ bool BackSwipeArea::childMouseEventFilter(QQuickItem *item, QEvent *event)
                 return true;
             }
         } else if (pt.state() == QEventPoint::State::Released) {
-            if (!m_active)
+            if (!m_active) {
                 m_tracking = false;
+                m_down = false;
+            }
         }
         return false;
     }
@@ -304,15 +336,22 @@ bool BackSwipeArea::childMouseEventFilter(QQuickItem *item, QEvent *event)
 
 void BackSwipeArea::touchEvent(QTouchEvent *event)
 {
-    if (event->pointCount() != 1) {
+    if (event->type() == QEvent::TouchCancel) {
+        release(QPointF());
+        m_pointId = -1;
+        event->accept();
+        return;
+    }
+    const QEventPoint *followed = followedPoint(event);
+    if (!followed) {
         QQuickItem::touchEvent(event);
         return;
     }
-    const QEventPoint &pt = event->points().first();
+    const QEventPoint &pt = *followed;
     switch (pt.state()) {
     case QEventPoint::State::Pressed:
         /* nothing under the finger took the press: track it ourselves */
-        if (press(pt.scenePosition()))
+        if (pressPoint(event, pt))
             event->accept();
         else
             event->ignore();
@@ -351,14 +390,10 @@ void BackSwipeArea::mouseReleaseEvent(QMouseEvent *event)
 
 void BackSwipeArea::mouseUngrabEvent()
 {
-    if (m_active)
-        release(QPointF());
-    m_tracking = false;
+    release(QPointF());
 }
 
 void BackSwipeArea::touchUngrabEvent()
 {
-    if (m_active)
-        release(QPointF());
-    m_tracking = false;
+    release(QPointF());
 }

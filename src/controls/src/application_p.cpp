@@ -73,11 +73,17 @@ bool Application_p::eventFilter(QObject *watched, QEvent *event)
     if (watched == m_watched) {
         QPointF pos;
         bool press = false;
-        if (event->type() == QEvent::TouchBegin) {
+        if (event->type() == QEvent::TouchBegin || event->type() == QEvent::TouchUpdate) {
+            // the point just pressed: with another one held (a contact
+            // whose lift Qt missed stays in every event) it comes in a
+            // TouchUpdate
             QTouchEvent *te = static_cast<QTouchEvent *>(event);
-            if (te->pointCount() > 0) {
-                pos = te->points().first().scenePosition();
-                press = true;
+            for (const QEventPoint &p : te->points()) {
+                if (p.state() == QEventPoint::State::Pressed) {
+                    pos = p.scenePosition();
+                    press = true;
+                    break;
+                }
             }
         } else if (event->type() == QEvent::MouseButtonPress) {
             QMouseEvent *me = static_cast<QMouseEvent *>(event);
