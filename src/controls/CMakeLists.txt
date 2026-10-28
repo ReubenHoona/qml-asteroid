@@ -10,6 +10,7 @@ set(SRC
 	src/edgeeffect.cpp
 	src/framediagnostics.cpp
 	src/backswipearea.cpp
+	src/wordpredictor.cpp
 )
 set(HEADERS
 	src/controls_plugin.h
@@ -24,6 +25,7 @@ set(HEADERS
 	src/edgeeffect.h
 	src/framediagnostics.h
 	src/backswipearea.h
+	src/wordpredictor.h
 )
 
 set(controls

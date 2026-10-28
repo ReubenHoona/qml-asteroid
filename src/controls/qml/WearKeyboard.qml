@@ -20,6 +20,12 @@ import org.asteroid.controls
     microphone (or a comma), space, full stop and the action key (Send or
     Done). Shift and backspace frame the third row, as on a phone.
 
+    Above the keys, Gboard's strip: three suggestions for the word being
+    written (WordPredictor: completions, and corrections when it is no
+    word), the likeliest in the middle; a tap puts it in place of the word,
+    with a space. Not for passwords, numbers or addresses
+    (\l suggestionsEnabled).
+
     A press shows the key enlarged above the finger and clicks the
     vibrator (ui_click); the finger can slide to another key before it lifts.
     A long press on a letter offers its accents (and on the top row its
@@ -70,6 +76,11 @@ FocusScope {
     property bool dictationAllowed: echoMode === TextInput.Normal
     /*! Shown while the microphone listens and nothing is heard yet */
     property string listeningText: qsTr("Listening…")
+    /*! The strip of word suggestions above the keys */
+    property bool suggestionsEnabled: echoMode === TextInput.Normal
+        && !(inputMethodHints & (Qt.ImhNoPredictiveText | Qt.ImhSensitiveData | Qt.ImhHiddenText
+                                 | Qt.ImhUrlCharactersOnly | Qt.ImhEmailCharactersOnly | Qt.ImhDigitsOnly
+                                 | Qt.ImhFormattedNumbersOnly | Qt.ImhDialableCharactersOnly))
 
     /*! The action key: the text is done */
     signal accepted(string text)
@@ -91,6 +102,9 @@ FocusScope {
     readonly property real _gap: Math.max(2, Math.round(_s * 0.006))
     readonly property real _rowsTop: Math.round(_cy - _r + _s * 0.325)
     readonly property real _margin: _s * 0.01
+    // the strip of suggestions, right above the keys
+    readonly property real _stripHeight: Math.round(_s * 0.08)
+    readonly property real _stripY: _rowsTop - _stripHeight - _gap
     // weights of the letter rows: they set the size of every key
     readonly property var _letterWeights: [10, 9, 10, 8.5]
 
@@ -264,6 +278,41 @@ FocusScope {
 
     Timer { id: shiftDouble; interval: 400 }
 
+    // ---- suggestions (WordPredictor) ----
+    WordPredictor { id: predictor }
+    // the word being written: the end of the text after its last space or
+    // punctuation
+    readonly property string _currentWord: {
+        var m = /[^\s.,!?;:"()\[\]{}<>@#\u2026]*$/.exec(text)
+        return m ? m[0] : ""
+    }
+    /*! The suggestions for the word being written, the likeliest first */
+    readonly property var suggestions: suggestionsEnabled && predictor.available && _currentWord.length > 0
+                                       && _partial.length === 0 && !_dictating
+                                       ? predictor.suggest(_currentWord, 3) : []
+    // the strip's slots, left to right: the second, the first, the third
+    readonly property var _slots: [suggestions.length > 1 ? suggestions[1] : "",
+                                   suggestions.length > 0 ? suggestions[0] : "",
+                                   suggestions.length > 2 ? suggestions[2] : ""]
+    /*! Puts the suggestion in place of the word being written, and a space */
+    function applySuggestion(s) {
+        if (s.length === 0)
+            return
+        text = text.substring(0, text.length - _currentWord.length) + s + " "
+        _lastTyped = false
+        if (shift === 1)
+            shift = 0
+        _capitalizeNext()
+    }
+    function _slotAt(x, y) {
+        if (!suggestionsEnabled || y < _stripY || y >= _stripY + _stripHeight || suggestions.length === 0)
+            return -1
+        var room = _chord(_stripY + _stripHeight / 2) - 2 * _margin
+        var left = _cx - room / 2
+        var i = Math.floor((x - left) / (room / 3))
+        return i >= 0 && i < 3 && _slots[i].length > 0 ? i : -1
+    }
+
     // ---- password: dots, the last letter for a second ----
     property bool _lastTyped: false
     Timer { id: maskTimer; interval: 1000; onTriggered: kb._lastTyped = false }
@@ -353,8 +402,8 @@ FocusScope {
         id: textArea
         width: Math.round(kb._s * 0.64)
         x: Math.round(kb._cx - width / 2)
-        y: Math.round(kb._cy - kb._r + kb._s * 0.075)
-        height: kb._rowsTop - y - Math.round(kb._s * 0.03)
+        y: Math.round(kb._cy - kb._r + kb._s * (kb.suggestionsEnabled ? 0.06 : 0.075))
+        height: (kb.suggestionsEnabled ? kb._stripY - Math.round(kb._s * 0.01) : kb._rowsTop - Math.round(kb._s * 0.03)) - y
         clip: true
 
         TextEdit {
@@ -405,6 +454,55 @@ FocusScope {
             color: "#80868b"
             font.pixelSize: shown.font.pixelSize
             text: kb._note.length > 0 ? kb._note : kb._dictating ? kb.listeningText : kb.placeholderText
+        }
+    }
+
+    // the strip: three suggestions, the likeliest in the middle
+    Item {
+        id: strip
+        visible: kb.suggestionsEnabled
+        readonly property real room: kb._chord(kb._stripY + kb._stripHeight / 2) - 2 * kb._margin
+        x: Math.round(kb._cx - room / 2)
+        y: kb._stripY
+        width: Math.round(room)
+        height: kb._stripHeight
+
+        Repeater {
+            model: 3
+            delegate: Item {
+                id: slot
+                required property int index
+                x: Math.round(index * strip.width / 3)
+                width: Math.round(strip.width / 3)
+                height: strip.height
+                Rectangle {
+                    anchors.fill: parent
+                    anchors.margins: kb._gap / 2
+                    radius: height / 2
+                    color: "#3c4043"
+                    visible: inputArea.pressedSlot === slot.index
+                }
+                Text {
+                    anchors.fill: parent
+                    anchors.leftMargin: kb._gap * 2
+                    anchors.rightMargin: kb._gap * 2
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    elide: Text.ElideRight
+                    text: kb._slots[slot.index]
+                    color: "#ffffff"
+                    font.pixelSize: Math.round(kb._s * 0.05)
+                    font.styleName: slot.index === 1 ? "Medium" : "Regular"
+                }
+                // a line between two suggestions
+                Rectangle {
+                    visible: slot.index > 0 && kb._slots[slot.index].length > 0 && kb._slots[slot.index - 1].length > 0
+                    width: 1
+                    height: parent.height * 0.5
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: "#5f6368"
+                }
+            }
         }
     }
 
@@ -560,6 +658,7 @@ FocusScope {
         preventStealing: true
         property bool blocksBackSwipe: true
         property int pressedKey: -1
+        property int pressedSlot: -1
         property real startX: 0
         property real startY: 0
         property bool gesture: false
@@ -571,9 +670,12 @@ FocusScope {
             gesture = false
             repeating = false
             pressedKey = kb._keyAt(mouse.x, mouse.y)
+            pressedSlot = pressedKey < 0 ? kb._slotAt(mouse.x, mouse.y) : -1
             if (pressedKey >= 0) {
                 Haptics.click()
                 longPress.restart()
+            } else if (pressedSlot >= 0) {
+                Haptics.click()
             }
         }
         onPositionChanged: (mouse) => {
@@ -608,7 +710,7 @@ FocusScope {
                     longPress.stop()
             }
         }
-        onReleased: {
+        onReleased: (mouse) => {
             longPress.stop()
             repeat.stop()
             if (alternatives.visible) {
@@ -616,13 +718,17 @@ FocusScope {
                 alternatives.chars = ""
             } else if (pressedKey >= 0 && !gesture && !repeating) {
                 kb._press(kb._keys[pressedKey])
+            } else if (pressedSlot >= 0 && !gesture && kb._slotAt(mouse.x, mouse.y) === pressedSlot) {
+                kb.applySuggestion(kb._slots[pressedSlot])
             }
             pressedKey = -1
+            pressedSlot = -1
             repeating = false
         }
         onCanceled: {
             longPress.stop()
             repeat.stop()
+            pressedSlot = -1
             alternatives.chars = ""
             pressedKey = -1
         }
