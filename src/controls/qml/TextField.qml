@@ -127,4 +127,11 @@ TextBase {
             }
         }
     }
+
+    // a tap opens the full screen keyboard (the editor never takes the press)
+    MouseArea {
+        anchors.fill: parent
+        enabled: textField.fullScreenKeyboard && !textField.readOnly
+        onClicked: textField.openKeyboard()
+    }
 }

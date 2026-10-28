@@ -29,6 +29,7 @@
 
 import QtQuick
 import QtQuick.VirtualKeyboard
+import org.asteroid.controls
 
 FocusScope {
     id: textBase
@@ -44,6 +45,67 @@ FocusScope {
     implicitHeight: editor.height + 12
 
     signal enterKeyClicked
+
+    /*
+     * Wear OS: a tap on the field opens the full screen keyboard
+     * (WearKeyboard) over the whole window, with the text at its top; its
+     * action key writes the text back (enterKeyClicked, and the editor's
+     * accepted), a swipe leaves it unchanged. The editor never takes the
+     * focus itself, so an application's InputPanel stays hidden. False: the
+     * editor takes the focus and the application's InputPanel shows.
+     */
+    property bool fullScreenKeyboard: true
+    /* The action key of the full screen keyboard: "done" (a tick) or "send" */
+    property string keyboardAction: "done"
+    property Item _keyboard: null
+
+    function openKeyboard() {
+        if (!editor || editor.readOnly || _keyboard)
+            return
+        var root = textBase.Window.contentItem
+        if (!root)
+            return
+        _keyboard = keyboardComponent.createObject(root, {
+            "text": editor.text,
+            "placeholderText": textBase.previewText,
+            "echoMode": editor.echoMode !== undefined ? editor.echoMode : TextInput.Normal,
+            "inputMethodHints": editor.inputMethodHints,
+            "actionKey": textBase.keyboardAction
+        })
+        if (_keyboard)
+            _keyboard.forceActiveFocus()
+    }
+    function _closeKeyboard() {
+        if (!_keyboard)
+            return
+        _keyboard.destroy()
+        _keyboard = null
+        editor.focus = false
+    }
+    Component {
+        id: keyboardComponent
+        WearKeyboard {
+            anchors.fill: parent
+            z: 10000
+            onAccepted: (text) => {
+                textBase.editor.text = text
+                textBase._closeKeyboard()
+                textBase.enterKeyClicked()
+                if (typeof textBase.editor.accepted === "function")
+                    textBase.editor.accepted()
+            }
+            onDismissed: textBase._closeKeyboard()
+        }
+    }
+    // an application that gives the editor the focus wants the keyboard
+    Connections {
+        target: textBase.editor
+        function onActiveFocusChanged() {
+            if (textBase.fullScreenKeyboard && textBase.editor.activeFocus && !textBase._keyboard)
+                Qt.callLater(textBase.openKeyboard)
+        }
+    }
+    Component.onDestruction: if (_keyboard) _keyboard.destroy()
 
     Keys.onReleased: (event) => {
         if (event.key === Qt.Key_Return)

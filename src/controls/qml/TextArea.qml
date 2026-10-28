@@ -85,7 +85,8 @@ TextBase {
     }
     MouseArea {
         anchors.fill: parent
-        onClicked: textEdit.forceActiveFocus()
+        z: textArea.fullScreenKeyboard ? 1 : 0
+        onClicked: textArea.fullScreenKeyboard ? textArea.openKeyboard() : textEdit.forceActiveFocus()
     }
     TextEdit {
         id: textEdit

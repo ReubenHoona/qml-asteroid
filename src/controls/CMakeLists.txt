@@ -62,6 +62,7 @@ set(controls
         TextField
         TimeText
         ValueMeter
+        WearKeyboard
 )
 
 foreach(control ${controls})
