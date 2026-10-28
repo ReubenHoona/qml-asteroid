@@ -53,21 +53,19 @@ Item {
         defaultValue: false
     }
 
-    readonly property real _radius: Math.min(width, height) / 2 - edgeMargin - _metrics.ascent * 0.8
+    readonly property real _radius: Math.min(width, height) / 2 - edgeMargin - pixelSize * 0.6
     readonly property var _chars: text.split("")
 
-    FontMetrics {
-        id: _metrics
-        font.pixelSize: timeText.pixelSize
-        font.styleName: "SemiCondensed Medium"
-    }
-
-    // the advance of each letter and where its middle sits along the arc
+    // the advance of each letter, as the letters themselves measure it
+    // (FontMetrics with the same font gave narrower advances: on the watch
+    // the letters of "4:43 PM" ran into each other), and where its middle
+    // sits along the arc
     readonly property var _layout: {
         var widths = []
         var total = 0
         for (var i = 0; i < _chars.length; i++) {
-            var w = _metrics.advanceWidth(_chars[i])
+            var item = _letters.count > i ? _letters.itemAt(i) : null
+            var w = item ? item.advance : 0
             widths.push(w)
             total += w
         }
@@ -83,8 +81,10 @@ Item {
     // a fixed number of letters ("12:59 PM" is 8): a new minute changes
     // their text, the Repeater does not make them again
     Repeater {
+        id: _letters
         model: 8
         delegate: Text {
+            readonly property real advance: implicitWidth
             visible: index < timeText._chars.length
             readonly property real along: timeText._layout[index] !== undefined ? timeText._layout[index] : 0
             // radians from the top of the circle; straight on a square screen

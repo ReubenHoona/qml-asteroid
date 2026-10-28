@@ -52,8 +52,14 @@ import org.asteroid.utils
 Item {
     /*! The text to display. */
     property alias text: title.text
+    /*!
+        True on a page that also shows the time at the top (TimeText): the
+        title moves below the time, as Wear OS lays out a title under its
+        curved time, instead of being drawn over it.
+    */
+    property bool belowTimeText: false
 
-    height: Dims.h(20)
+    height: belowTimeText ? Dims.h(28) : Dims.h(20)
     anchors {
         top: parent.top
         left: parent.left
@@ -74,6 +80,7 @@ Item {
 
         height: Dims.h(20)
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: parent.belowTimeText ? Dims.h(3) : 0
         font {
             styleName: "SemiCondensed Light"
             pixelSize: Dims.l(7)
