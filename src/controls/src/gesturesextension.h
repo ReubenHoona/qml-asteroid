@@ -37,6 +37,10 @@ public:
     ~GestureSurface();
 
     static GestureSurface *forWindow(QWindow *window);
+
+    /* The compositor may take a swipe right from anywhere as back (protocol
+     * version 2; nothing with an older compositor) */
+    void setBackFromAnywhere(bool enabled);
 };
 
 #endif // GESTURESEXTENSION_H

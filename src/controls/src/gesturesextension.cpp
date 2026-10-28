@@ -16,10 +16,11 @@
 
 #include <QGuiApplication>
 #include <QWindow>
+#include <wayland-client-core.h>
 #include <qpa/qplatformnativeinterface.h>
 
 GesturesManager::GesturesManager()
-    : QWaylandClientExtensionTemplate<GesturesManager>(1)
+    : QWaylandClientExtensionTemplate<GesturesManager>(2)
 {
 }
 
@@ -43,6 +44,15 @@ GestureSurface::~GestureSurface()
 {
     if (isInitialized())
         destroy();
+}
+
+void GestureSurface::setBackFromAnywhere(bool enabled)
+{
+    if (!isInitialized())
+        return;
+    if (wl_proxy_get_version(reinterpret_cast<wl_proxy *>(object())) < 2)
+        return;
+    set_back_from_anywhere(enabled ? 1 : 0);
 }
 
 GestureSurface *GestureSurface::forWindow(QWindow *window)

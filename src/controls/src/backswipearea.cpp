@@ -8,6 +8,7 @@
 #include <QMouseEvent>
 #include <QSettings>
 #include <QTouchEvent>
+#include <QQuickWindow>
 #include <QtMath>
 
 #include <private/qquickitem_p.h>
@@ -140,7 +141,7 @@ static bool blocks(QQuickItem *item)
     return false;
 }
 
-static bool blockedUnder(QQuickItem *item, const QPointF &scenePos)
+static bool blockedBelow(QQuickItem *item, const QPointF &scenePos)
 {
     if (!item->isVisible() || !item->isEnabled())
         return false;
@@ -152,17 +153,22 @@ static bool blockedUnder(QQuickItem *item, const QPointF &scenePos)
         return false;
     const QList<QQuickItem *> children = QQuickItemPrivate::get(item)->paintOrderChildItems();
     for (QQuickItem *child : children) {
-        if (blockedUnder(child, scenePos))
+        if (blockedBelow(child, scenePos))
             return true;
     }
     return false;
+}
+
+bool BackSwipeArea::blockedUnder(QQuickItem *root, const QPointF &scenePos)
+{
+    return root && blockedBelow(root, scenePos);
 }
 
 bool BackSwipeArea::blockedAt(const QPointF &scenePos) const
 {
     const QList<QQuickItem *> children = QQuickItemPrivate::get(this)->paintOrderChildItems();
     for (QQuickItem *child : children) {
-        if (blockedUnder(child, scenePos))
+        if (blockedBelow(child, scenePos))
             return true;
     }
     return false;
@@ -245,6 +251,13 @@ bool BackSwipeArea::childMouseEventFilter(QQuickItem *item, QEvent *event)
         if (pt.state() == QEventPoint::State::Pressed) {
             press(pt.scenePosition());
         } else if (pt.state() == QEventPoint::State::Updated) {
+            // a slider that keeps its drag (IntSelector sets preventStealing
+            // once it moves sideways) is not ours to take
+            QQuickItem *g = qobject_cast<QQuickItem *>(te->exclusiveGrabber(pt));
+            if (!m_active && g && g != this && (g->keepTouchGrab() || g->keepMouseGrab())) {
+                m_tracking = false;
+                return false;
+            }
             if (!m_active && move(pt.scenePosition())) {
                 /* take the drag over: accepting the filtered event makes
                  * the delivery agent give us the exclusive grab */
@@ -268,6 +281,11 @@ bool BackSwipeArea::childMouseEventFilter(QQuickItem *item, QEvent *event)
         if (event->type() == QEvent::MouseButtonPress) {
             press(me->scenePosition());
         } else if (event->type() == QEvent::MouseMove) {
+            QQuickItem *g = window() ? window()->mouseGrabberItem() : nullptr;
+            if (!m_active && g && g != this && g->keepMouseGrab()) {
+                m_tracking = false;
+                return false;
+            }
             if (!m_active && move(me->scenePosition())) {
                 setKeepMouseGrab(true);
                 grabMouse();

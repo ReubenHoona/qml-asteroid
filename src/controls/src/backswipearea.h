@@ -57,6 +57,10 @@ public:
     /* Ends a gesture whose animation is done: value 0, not active */
     Q_INVOKABLE void reset();
 
+    /* Whether a touch at scenePos, under root, starts on content of its own
+     * that moves sideways (a back swipe must leave it alone) */
+    static bool blockedUnder(QQuickItem *root, const QPointF &scenePos);
+
 signals:
     void activeChanged();
     void valueChanged();

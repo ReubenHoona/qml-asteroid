@@ -28,14 +28,89 @@
  */
 
 #include "application_p.h"
+#include "backswipearea.h"
 #include "gesturesextension.h"
+
+#include <QMouseEvent>
+#include <QTouchEvent>
 
 Application_p::Application_p() : QQuickItem()
 {
     m_overridesSystemGestures = false;
 }
 
-Application_p::~Application_p() = default;
+Application_p::~Application_p()
+{
+    if (m_watched)
+        m_watched->removeEventFilter(this);
+}
+
+void Application_p::setBackFromAnywhere(bool enable)
+{
+    if (m_backFromAnywhere == enable)
+        return;
+    m_backFromAnywhere = enable;
+    applyBackToCompositor();
+    emit backFromAnywhereChanged();
+}
+
+void Application_p::itemChange(ItemChange change, const ItemChangeData &value)
+{
+    if (change == ItemSceneChange) {
+        if (m_watched)
+            m_watched->removeEventFilter(this);
+        m_watched = value.window;
+        if (m_watched)
+            m_watched->installEventFilter(this);
+    }
+    QQuickItem::itemChange(change, value);
+}
+
+/* Per touch, before the compositor decides (it waits for 12 px of travel):
+ * may a swipe right from here go back? Not on content that moves sideways */
+bool Application_p::eventFilter(QObject *watched, QEvent *event)
+{
+    if (watched == m_watched) {
+        QPointF pos;
+        bool press = false;
+        if (event->type() == QEvent::TouchBegin) {
+            QTouchEvent *te = static_cast<QTouchEvent *>(event);
+            if (te->pointCount() > 0) {
+                pos = te->points().first().scenePosition();
+                press = true;
+            }
+        } else if (event->type() == QEvent::MouseButtonPress) {
+            QMouseEvent *me = static_cast<QMouseEvent *>(event);
+            if (me->source() == Qt::MouseEventNotSynthesized) {
+                pos = me->scenePosition();
+                press = true;
+            }
+        } else if (event->type() == QEvent::Expose && m_sentBack < 0) {
+            applyBackToCompositor();
+        }
+        if (press) {
+            m_touchBlocked = BackSwipeArea::blockedUnder(m_watched->contentItem(), pos);
+            applyBackToCompositor();
+        }
+    }
+    return QQuickItem::eventFilter(watched, event);
+}
+
+void Application_p::applyBackToCompositor()
+{
+    auto *win = window();
+    if (!win || !win->isExposed())
+        return;
+    if (!m_gestureSurface)
+        m_gestureSurface.reset(GestureSurface::forWindow(win));
+    if (!m_gestureSurface)
+        return;
+    const int want = (m_backFromAnywhere && !m_touchBlocked) ? 1 : 0;
+    if (want == m_sentBack)
+        return;
+    m_sentBack = want;
+    m_gestureSurface->setBackFromAnywhere(want);
+}
 
 void Application_p::setOverridesSystemGestures(bool enable)
 {
