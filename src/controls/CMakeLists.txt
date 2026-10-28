@@ -89,7 +89,7 @@ pkg_check_modules(MLITE6 REQUIRED IMPORTED_TARGET mlite6)
 qt_add_shaders(
     asteroidcontrolsplugin "asteroidcontrolsplugin_shaders"
     PREFIX "/org/asteroid/controls"
-    FILES "qml/spinnerfade.frag" "qml/positionindicator.frag"
+    FILES "qml/spinnerfade.frag"
 )
 
 set(controls-docs "$<LIST:TRANSFORM,$<LIST:TRANSFORM,$<LOWER_CASE:${controls}>,PREPEND,qml->,APPEND,.html>")

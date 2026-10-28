@@ -26,6 +26,11 @@ import org.asteroid.utils
     \qml
     PositionIndicator { flickable: myListView }
     \endqml
+
+    The arc is made of short rounded rectangles along the circle, so it needs
+    no shader of its own (a first use compiled one, a 50 ms frame); the thumb
+    is one item turned about the middle of the screen, so a scroll changes
+    one rotation per frame.
 */
 Item {
     id: indicator
@@ -87,30 +92,47 @@ Item {
     // Wear OS ScrollIndicator: 50 x 5 dp, 2 dp from the edge; the Pixel
     // Watch 2 has 2 px per dp on 384 px (192 dp)
     readonly property real _dp: Math.min(width, height) / 192
-    readonly property real _halfThickness: 2.5 * _dp
-    readonly property real _midRadius: Math.min(width, height) / 2 - 2 * _dp - _halfThickness
-    readonly property real _halfLength: 25 * _dp
-    readonly property real _halfSweep: _halfLength / _midRadius
+    readonly property real _thickness: 5 * _dp
+    readonly property real _radius: Math.min(width, height) / 2 - 2 * _dp - _thickness / 2
+    readonly property real _length: 50 * _dp
 
-    ShaderEffect {
+    // an arc of `length` px centred on the right edge, as rounded segments
+    // (each one thickness longer than its share, so they join smoothly)
+    component Arc: Item {
         id: arc
-        // only the band at the right edge that holds the arc
-        width: indicator.width / 2 - indicator._midRadius * Math.cos(indicator._halfSweep) + indicator._halfThickness + 2
-        height: 2 * (indicator._midRadius + indicator._halfThickness) * Math.sin(indicator._halfSweep) + 2 * indicator._halfThickness + 4
-        x: indicator.width - width
-        y: (indicator.height - height) / 2
+        property real length: 0
+        property color color: "white"
+        readonly property int count: Math.max(2, Math.ceil(length / (indicator._thickness * 1.2)))
+        anchors.fill: parent
+        Repeater {
+            model: arc.count
+            delegate: Rectangle {
+                readonly property real share: arc.length / arc.count
+                // radians, 0 at the right edge, positive downwards
+                readonly property real angle: (-arc.length / 2 + share * (index + 0.5)) / indicator._radius
+                width: indicator._thickness
+                height: share + indicator._thickness
+                radius: width / 2
+                color: arc.color
+                x: arc.width / 2 + indicator._radius * Math.cos(angle) - width / 2
+                y: arc.height / 2 + indicator._radius * Math.sin(angle) - height / 2
+                rotation: angle * 180 / Math.PI
+            }
+        }
+    }
 
-        property size itemSize: Qt.size(width, height)
-        property point center: Qt.point(indicator.width / 2 - x, indicator.height / 2 - y)
-        property real midRadius: indicator._midRadius
-        property real halfThickness: indicator._halfThickness
-        property real halfLength: indicator._halfLength
-        property real thumbStart: -halfLength + (2 * halfLength) * (1 - indicator._thumbFraction) * indicator._position
-        property real thumbEnd: thumbStart + 2 * halfLength * indicator._thumbFraction
-        // Wear OS: the track is the foreground at 30%; Qt premultiplies
-        property color trackColor: Qt.rgba(1, 1, 1, 0.3)
-        property color thumbColor: "white"
+    // Wear OS: the track is the foreground at 30%: opaque here, so the
+    // segments' overlaps do not show
+    Arc {
+        length: indicator._length
+        color: "#5a5a5a"
+    }
 
-        fragmentShader: "positionindicator.frag.qsb"
+    Arc {
+        id: thumb
+        length: indicator._length * indicator._thumbFraction
+        color: "white"
+        // along the track, turned about the middle of the screen
+        rotation: ((indicator._length - length) * (indicator._position - 0.5)) / indicator._radius * 180 / Math.PI
     }
 }

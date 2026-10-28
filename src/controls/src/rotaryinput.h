@@ -8,6 +8,7 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QPointF>
 #include <QElapsedTimer>
 #include <QTimer>
@@ -83,6 +84,8 @@ private:
     void startGlide();
     friend class RotaryFrames;
     void showIndicator(QQuickItem *flickable, bool flash);
+    bool ensureIndicator(QQuickWindow *window, QQuickItem *anyItem);
+    void prepareIndicator(QQuickWindow *window);
     void readSettings();
 
     QPointer<QQuickItem> m_target;
@@ -120,6 +123,8 @@ private:
     bool m_indicatorOn = true;
 
     QPointer<QObject> m_indicator;
+    /* windows whose indicator is made (or about to be) ahead of use */
+    QSet<QQuickWindow *> m_prepared;
 };
 
 #endif // ROTARYINPUT_H

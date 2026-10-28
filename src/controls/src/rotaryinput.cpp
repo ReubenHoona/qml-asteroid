@@ -134,6 +134,15 @@ bool RotaryInput::eventFilter(QObject *watched, QEvent *event)
             break;
         return handleWheel(window, static_cast<QWheelEvent *>(event));
     }
+    case QEvent::Expose: {
+        QQuickWindow *window = qobject_cast<QQuickWindow *>(watched);
+        if (window && !m_prepared.contains(window)) {
+            m_prepared.insert(window);
+            QPointer<QQuickWindow> w(window);
+            QTimer::singleShot(1500, this, [this, w]() { prepareIndicator(w); });
+        }
+        break;
+    }
     case QEvent::TouchBegin: {
         QQuickWindow *window = qobject_cast<QQuickWindow *>(watched);
         QTouchEvent *te = static_cast<QTouchEvent *>(event);
@@ -495,16 +504,39 @@ void RotaryInput::stepSnap(int steps)
     }
 }
 
-void RotaryInput::showIndicator(QQuickItem *flickable, bool flash)
+/* Any item of the window that QML made: its engine and context */
+static QQuickItem *qmlItemOf(QQuickItem *item)
 {
-    QQuickWindow *window = flickable->window();
-    if (!window)
+    if (qmlEngine(item))
+        return item;
+    const QList<QQuickItem *> children = item->childItems();
+    for (QQuickItem *child : children) {
+        if (QQuickItem *found = qmlItemOf(child))
+            return found;
+    }
+    return nullptr;
+}
+
+/* Make the indicator before anyone scrolls: compiling and creating it took
+ * 80 ms the first time a finger or the crown moved a list, a stall in the
+ * first frames of that scroll. Runs 1.5 s after a window shows. */
+void RotaryInput::prepareIndicator(QQuickWindow *window)
+{
+    if (!window || !m_indicatorOn)
         return;
+    if (m_indicator && qobject_cast<QQuickItem *>(m_indicator)->window() == window)
+        return;
+    if (QQuickItem *item = qmlItemOf(window->contentItem()))
+        ensureIndicator(window, item);
+}
+
+bool RotaryInput::ensureIndicator(QQuickWindow *window, QQuickItem *anyItem)
+{
     QQuickItem *root = window->contentItem();
     if (!m_indicator || qobject_cast<QQuickItem *>(m_indicator)->window() != window) {
-        QQmlEngine *engine = qmlEngine(flickable);
+        QQmlEngine *engine = qmlEngine(anyItem);
         if (!engine)
-            return;
+            return false;
         QQmlComponent component(engine);
         component.setData("import org.asteroid.controls\nPositionIndicator { }", QUrl());
         QObject *o = component.create(qmlContext(root) ? qmlContext(root) : engine->rootContext());
@@ -512,7 +544,7 @@ void RotaryInput::showIndicator(QQuickItem *flickable, bool flash)
         if (!indicator) {
             qCWarning(lcRotary) << "PositionIndicator:" << component.errorString();
             delete o;
-            return;
+            return false;
         }
         if (m_indicator)
             m_indicator->deleteLater();
@@ -521,6 +553,14 @@ void RotaryInput::showIndicator(QQuickItem *flickable, bool flash)
         indicator->setZ(1e6);
         m_indicator = indicator;
     }
+    return true;
+}
+
+void RotaryInput::showIndicator(QQuickItem *flickable, bool flash)
+{
+    QQuickWindow *window = flickable->window();
+    if (!window || !ensureIndicator(window, flickable))
+        return;
     m_indicator->setProperty("flickable", QVariant::fromValue<QObject *>(flickable));
     if (flash)
         QMetaObject::invokeMethod(m_indicator, "flash");
