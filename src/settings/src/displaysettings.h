@@ -22,6 +22,10 @@ class DisplaySettings : public QObject
     Q_PROPERTY(int  maximumBrightness          READ maximumBrightness                                              NOTIFY maximumBrightnessChanged)
     Q_PROPERTY(bool lowPowerModeEnabled        READ lowPowerModeEnabled        WRITE setLowPowerModeEnabled        NOTIFY lowPowerModeEnabledChanged)
     Q_PROPERTY(bool ambientLightSensorEnabled  READ ambientLightSensorEnabled  WRITE setAmbientLightSensorEnabled  NOTIFY ambientLightSensorEnabledChanged)
+    // the values are mce's, not the defaults: mce has answered the reads
+    // made at construction (a client that keeps the user's value to put it
+    // back, as the flashlight, waits for this)
+    Q_PROPERTY(bool ready                      READ ready                                                          NOTIFY readyChanged)
 
 public:
     explicit DisplaySettings(QObject *parent = nullptr);
@@ -30,6 +34,7 @@ public:
     int  maximumBrightness() const         { return m_maximumBrightness; }
     bool lowPowerModeEnabled() const       { return m_lowPowerModeEnabled; }
     bool ambientLightSensorEnabled() const { return m_ambientLightSensorEnabled; }
+    bool ready() const                     { return m_pending == 0; }
 
     void setBrightness(int value);
     void setLowPowerModeEnabled(bool enabled);
@@ -40,13 +45,17 @@ signals:
     void maximumBrightnessChanged();
     void lowPowerModeEnabledChanged();
     void ambientLightSensorEnabledChanged();
+    void readyChanged();
 
 private:
+    void seeded();
+
     MceConfig *m_mce;
     int  m_brightness                = 60;
     int  m_maximumBrightness         = 100;
     bool m_lowPowerModeEnabled       = false;
     bool m_ambientLightSensorEnabled = true;
+    int  m_pending                   = 4;
 };
 
 #endif // DISPLAYSETTINGS_H

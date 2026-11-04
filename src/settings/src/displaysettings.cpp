@@ -25,24 +25,28 @@ DisplaySettings::DisplaySettings(QObject *parent) : QObject(parent), m_mce(new M
             m_maximumBrightness = v.toInt();
             emit maximumBrightnessChanged();
         }
+        seeded();
     });
     m_mce->get(KeyBrightness, [this](const QVariant &v) {
         if (v.isValid() && m_brightness != v.toInt()) {
             m_brightness = v.toInt();
             emit brightnessChanged();
         }
+        seeded();
     });
     m_mce->get(KeyLowPowerMode, [this](const QVariant &v) {
         if (v.isValid() && m_lowPowerModeEnabled != v.toBool()) {
             m_lowPowerModeEnabled = v.toBool();
             emit lowPowerModeEnabledChanged();
         }
+        seeded();
     });
     m_mce->get(KeyAlsEnabled, [this](const QVariant &v) {
         if (v.isValid() && m_ambientLightSensorEnabled != v.toBool()) {
             m_ambientLightSensorEnabled = v.toBool();
             emit ambientLightSensorEnabledChanged();
         }
+        seeded();
     });
 
     // Keep in sync when something else (e.g. MCE itself) changes a key.
@@ -57,6 +61,13 @@ DisplaySettings::DisplaySettings(QObject *parent) : QObject(parent), m_mce(new M
             m_ambientLightSensorEnabled = v.toBool(); emit ambientLightSensorEnabledChanged();
         }
     });
+}
+
+// one of the four reads made at construction has been answered
+void DisplaySettings::seeded()
+{
+    if (m_pending > 0 && --m_pending == 0)
+        emit readyChanged();
 }
 
 void DisplaySettings::setBrightness(int value)
