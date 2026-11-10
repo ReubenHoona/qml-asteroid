@@ -29,6 +29,7 @@
 
 import QtQuick
 import QtQuick.VirtualKeyboard
+import org.asteroid.controls
 
 /*!
     \qmltype TextField
@@ -110,12 +111,12 @@ TextBase {
 
             y: 6
             focus: true
-            color: "#2B2C2E"
+            color: Theme.color.onSurface
             cursorVisible: activeFocus
             passwordCharacter: "\u2022"
             font.pixelSize: textField.fontPixelSize
-            selectionColor: Qt.rgba(0.0, 0.0, 0.0, 0.15)
-            selectedTextColor: color
+            selectionColor: Theme.color.primary
+            selectedTextColor: Theme.color.onPrimary
             selectByMouse: true
             width: Math.max(flickable.width, implicitWidth)-2
 

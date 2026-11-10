@@ -29,6 +29,7 @@
 
 import QtQuick
 import QtQuick.VirtualKeyboard
+import org.asteroid.controls
 
 /*!
     \qmltype TextArea
@@ -80,7 +81,7 @@ TextBase {
             x: 8
             y: (index+1)*editor.cursorRectangle.height+6
             height: 1; width: textArea.width-24
-            color: "#D6D6D6"
+            color: Theme.color.outlineVariant
         }
     }
     MouseArea {
@@ -97,13 +98,13 @@ TextBase {
 
         y: 6
         focus: true
-        color: "#2B2C2E"
+        color: Theme.color.onSurface
         wrapMode: TextEdit.Wrap
         cursorVisible: activeFocus
         height: Math.max(implicitHeight, 60)
         font.pixelSize: textArea.fontPixelSize
-        selectionColor: Qt.rgba(1.0, 1.0, 1.0, 0.5)
-        selectedTextColor: Qt.rgba(0.0, 0.0, 0.0, 0.8)
+        selectionColor: Theme.color.primary
+        selectedTextColor: Theme.color.onPrimary
         selectByMouse: true
         anchors { left: parent.left; right: parent.right; margins: 12 }
     }
