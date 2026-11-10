@@ -11,6 +11,8 @@ set(SRC
 	src/framediagnostics.cpp
 	src/backswipearea.cpp
 	src/wordpredictor.cpp
+	src/spring.cpp
+	src/scrollphysics.cpp
 )
 set(HEADERS
 	src/controls_plugin.h
@@ -26,6 +28,8 @@ set(HEADERS
 	src/framediagnostics.h
 	src/backswipearea.h
 	src/wordpredictor.h
+	src/spring.h
+	src/scrollphysics.h
 )
 
 set(controls
@@ -66,6 +70,8 @@ set(controls
         TimeText
         ValueMeter
         WearKeyboard
+        Motion
+        ScalingList
 )
 
 foreach(control ${controls})
@@ -74,6 +80,7 @@ endforeach()
 
 set_source_files_properties(qml/Dims.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Motion.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt6_add_qml_module(asteroidcontrolsplugin
     URI org.asteroid.controls

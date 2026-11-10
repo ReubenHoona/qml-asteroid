@@ -32,6 +32,7 @@
 import QtQuick
 import QtQuick.Window
 import org.asteroid.utils
+import org.asteroid.controls
 
 /*!
     \qmltype BorderGestureArea
@@ -145,9 +146,35 @@ MouseArea {
     readonly property bool flung: velocity >= flingVelocity
     /*!
         Speed above which a gesture counts as \l flung, in pixels per second.
-        Defaults to 125 dp/s on a 192 dp wide watch.
+        Defaults to stock's config_gestureMinSwipeVelocity, 500 dp/s
+        (1000 px/s on the Pixel Watch 2).
      */
-    property real flingVelocity: Math.min(width, height) / 192 * 125
+    property real flingVelocity: Math.min(width, height) / 192 * Motion.backGesture.minVelocityDp
+    /*!
+        Stock's "will go back" while dragging (CP3A SwipeBackGestureHandler):
+        the gesture is past 0.33 of the screen along its direction and the
+        last move did not go back the other way.
+     */
+    readonly property bool armed: active && _travel > Motion.backGesture.commitFraction * _span && _lastStep >= 0
+    /*!
+        Set when the gesture ends, before \l gestureFinished: stock's
+        decision. 500 dp/s or more along the gesture commits, 500 dp/s or
+        more against it cancels, otherwise it commits past
+        lerp(0.33, 0.10, v / 500 dp/s) of the screen when the last move was
+        not backwards (the same rule as BackSwipeArea.shouldCommit()).
+     */
+    property bool committed: false
+    /*!
+        The progress (0..1 of \l max) smoothed by stock's back progress
+        spring (stiffness 1500, damping 1, BackProgressAnimator): it chases
+        the finger instead of jumping with it.
+     */
+    readonly property real smoothedProgress: _smooth.value
+    /*!
+        Gestures that play the threshold haptic (a click, at most every
+        100 ms) when they arm: the back swipe, as stock.
+     */
+    property var thresholdHapticGestures: ["right"]
     /*!
         True if gesture is left or right.
     */
@@ -185,6 +212,30 @@ MouseArea {
     property real _lastPos
     property real _lastTime
     property real _speed
+    // distance along the gesture from the press, the screen size along it,
+    // and the last step (positive along the gesture)
+    property real _travel: 0
+    readonly property real _span: horizontal ? width : height
+    property real _lastStep: 0
+    property real _lastHaptic: 0
+
+    WearSpring {
+        id: _smooth
+        to: root.progress
+        stiffness: Motion.backGesture.progress.stiffness
+        dampingRatio: Motion.backGesture.progress.dampingRatio
+        visibilityThreshold: 0.0005
+    }
+
+    onArmedChanged: {
+        if (!armed || thresholdHapticGestures.indexOf(gesture) < 0)
+            return
+        var now = Date.now()
+        if (now - _lastHaptic >= Motion.backGesture.hapticIntervalMs) {
+            _lastHaptic = now
+            Haptics.click()
+        }
+    }
 
     // Half the width of the circle inscribed in the area at height y (or
     // half its height at x), 0 outside it
@@ -224,6 +275,10 @@ MouseArea {
         value = 0
         velocity = 0
         _speed = 0
+        _travel = 0
+        _lastStep = 0
+        committed = false
+        _smooth.snapTo(0)
         if (horizontal)
             _mouseStart = mouse.x
         else
@@ -237,6 +292,9 @@ MouseArea {
     onPositionChanged: (mouse) => {
         var p = horizontal ? mouse.x : mouse.y
         value = Math.max(Math.min(p - _mouseStart, max), -max)
+        _travel = inverted ? _mouseStart - p : p - _mouseStart
+        var step = p - _lastPos
+        _lastStep = inverted ? -step : step
         // finger speed, smoothed over the last few moves
         var now = Date.now()
         var dt = now - _lastTime
@@ -262,7 +320,9 @@ MouseArea {
     onReleased: {
         // a finger that stopped before lifting did not flick
         var speed = Date.now() - _lastTime > 80 ? 0 : _speed
-        velocity = inverted ? -speed : speed
+        var vmax = Math.min(width, height) / 192 * Motion.backGesture.maxVelocityDp
+        velocity = Math.max(-vmax, Math.min(vmax, inverted ? -speed : speed))
+        committed = Motion.backShouldCommit(_travel, velocity, _lastStep, _span, Math.min(width, height) / 192)
         gestureFinished(gesture)
         if (!delayReset)
             reset()

@@ -104,6 +104,7 @@ private:
      * with the display (a 16 ms timer beats against the 16.7 ms vsync) */
     QAbstractAnimation *m_frame = nullptr;
     int m_frameTime = 0;
+    qreal m_glideVelocity = 0;   /* px/s of the smoothing spring */
     QElapsedTimer m_lastEvent;
     qreal m_speed = 0;           /* smoothed counts per second */
 

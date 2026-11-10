@@ -11,10 +11,14 @@
 #include <QQuickItem>
 #include <QtQml/qqmlregistration.h>
 
+class WearSpring;
+
 /*
- * Swipe right from anywhere to go back, as Wear OS's SwipeToDismissBox: the
- * area watches the touches its children get and takes a drag over once it
- * clearly goes right (12 px, mostly sideways). Taps, vertical scrolling
+ * Swipe right from anywhere to go back, as Wear OS does (CP3A
+ * WearGestureInterceptionDetector and SwipeBackGestureHandler): the area
+ * watches the touches its children get and takes a drag over once it goes
+ * right by more than twice the touch slop (2 x 8 dp = 32 px) with
+ * |dy| < |dx|. Taps, vertical scrolling
  * and horizontal content that can still scroll back stay with the children:
  * a drag that starts on a horizontally scrolling Flickable or ListView that
  * is not at its start, or on an item with the property blocksBackSwipe set
@@ -22,9 +26,17 @@
  * (round-aware, as BorderGestureArea), as Wear OS does for content that
  * scrolls horizontally.
  *
- * While a drag is taken, "value" follows the finger (0 .. width); on release
- * "finished" is emitted with "velocity" (px/s) and "flung" set, and the user
- * animates "value" to its end (it is writable) and calls reset().
+ * While a drag is taken, "value" follows the finger (0 .. width) and
+ * "smoothedProgress" chases value / width on a spring (stiffness 1500,
+ * damping 1, stock BackProgressAnimator). "armed" is stock's "will go back":
+ * the swipe is past 0.33 of the width and the finger is not moving left;
+ * it plays the threshold haptic (a click, at most once per 100 ms) when it
+ * turns on. On release "finished" is emitted with "velocity" (px/s), and
+ * "committed" holds stock's decision: 500 dp/s (1000 px/s) or more to the
+ * right goes back, 500 dp/s or more to the left cancels, otherwise it goes
+ * back past lerp(0.33, 0.10, v / 500 dp/s) of the width when the last move
+ * was not leftward. The user animates to the end (value is writable) and
+ * calls reset().
  */
 class BackSwipeArea : public QQuickItem
 {
@@ -35,6 +47,13 @@ class BackSwipeArea : public QQuickItem
     Q_PROPERTY(qreal progress READ progress NOTIFY valueChanged)
     Q_PROPERTY(qreal velocity READ velocity NOTIFY velocityChanged)
     Q_PROPERTY(bool flung READ flung NOTIFY velocityChanged)
+    Q_PROPERTY(bool committed READ committed NOTIFY velocityChanged)
+    Q_PROPERTY(bool armed READ armed NOTIFY armedChanged)
+    Q_PROPERTY(qreal smoothedProgress READ smoothedProgress NOTIFY smoothedProgressChanged)
+    /* d smoothedProgress / dt, per second */
+    Q_PROPERTY(qreal smoothedVelocity READ smoothedVelocity NOTIFY smoothedProgressChanged)
+    /* how far right a drag goes before it is a back swipe, px */
+    Q_PROPERTY(qreal decideDistance READ decideDistance NOTIFY densityChanged)
     Q_PROPERTY(bool edgeOnly READ edgeOnly WRITE setEdgeOnly NOTIFY edgeOnlyChanged)
     /* Whether a swipe is taken at all (not "enabled", which would also
      * disable the children) */
@@ -49,6 +68,17 @@ public:
     qreal progress() const { return width() > 0 ? qBound<qreal>(0, m_value / width(), 1) : 0; }
     qreal velocity() const { return m_velocity; }
     bool flung() const;
+    bool committed() const { return m_committed; }
+    bool armed() const { return m_armed; }
+    qreal smoothedProgress() const;
+    qreal smoothedVelocity() const;
+    qreal decideDistance() const;
+    /* px per dp: the shorter side over 192 dp (2.0 on the Pixel Watch 2) */
+    qreal dp() const;
+
+    /* Stock's decision on release (SwipeBackGestureHandler): dx = the
+     * swipe's distance (px), velocity px/s, lastDx = the last move (px) */
+    Q_INVOKABLE bool shouldCommit(qreal dx, qreal velocity, qreal lastDx, qreal width) const;
     bool edgeOnly() const { return m_edgeOnly; }
     void setEdgeOnly(bool e);
     bool swipeEnabled() const { return m_swipeEnabled; }
@@ -69,6 +99,11 @@ signals:
     void swipeEnabledChanged();
     void started();
     void finished();
+    void armedChanged();
+    void smoothedProgressChanged();
+    void densityChanged();
+    /* the swipe armed: the threshold haptic played (rate-limited) */
+    void thresholdCrossed();
 
 protected:
     bool childMouseEventFilter(QQuickItem *item, QEvent *event) override;
@@ -89,6 +124,7 @@ private:
     void release(const QPointF &scenePos);
     bool startAllowed(const QPointF &scenePos) const;
     bool blockedAt(const QPointF &scenePos) const;
+    void setArmed(bool a);
 
     bool m_tracking = false;
     bool m_active = false;
@@ -105,6 +141,13 @@ private:
     qreal m_speed = 0;
     qreal m_lastX = 0;
     QElapsedTimer m_lastTime;
+    /* where the finger went down, and its last horizontal step */
+    qreal m_downX = 0;
+    qreal m_lastDx = 0;
+    bool m_armed = false;
+    bool m_committed = false;
+    QElapsedTimer m_lastHaptic;
+    WearSpring *m_smooth = nullptr;
 };
 
 #endif // BACKSWIPEAREA_H
