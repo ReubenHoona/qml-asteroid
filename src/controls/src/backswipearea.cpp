@@ -4,6 +4,8 @@
  */
 
 #include "backswipearea.h"
+#include "haptics.h"
+#include "spring.h"
 
 #include <QMouseEvent>
 #include <QSettings>
@@ -14,12 +16,24 @@
 #include <private/qquickitem_p.h>
 #include <private/qquickpointerhandler_p.h>
 
-/* 6 dp at 2 px per dp: a drag this far to the right, at most 34 degrees off
- * the horizontal, is a back swipe */
-static const qreal DECIDE_PX = 12.0;
-static const qreal MAX_SLOPE = 0.67;
-/* Wear OS: a quick flick dismisses whatever the distance, 125 dp/s */
-static const qreal FLING_DP_PER_S = 125.0;
+/* CP3A WearGestureInterceptionDetector: a back swipe starts once dx is more
+ * than twice the touch slop (config_viewConfigurationTouchSlop 8 dp, so
+ * 32 px) and |dy| < |dx| */
+static const qreal TOUCH_SLOP_DP = 8.0;
+static const qreal DECIDE_SLOPS = 2.0;
+static const qreal MAX_SLOPE = 1.0;
+/* CP3A SwipeBackGestureHandler.java:111-149: armed past 0.33 W; on release
+ * >= config_gestureMinSwipeVelocity (500 dp/s) goes back, <= -500 dp/s
+ * cancels, else past lerp(0.33, 0.10, v / 500 dp/s) W; the velocity is
+ * capped at config_gestureMaxSwipeVelocity (8000 dp/s) */
+static const qreal COMMIT_FRACTION = 0.33;
+static const qreal MIN_COMMIT_FRACTION = 0.10;
+static const qreal MIN_VELOCITY_DP = 500.0;
+static const qreal MAX_VELOCITY_DP = 8000.0;
+/* BackProgressAnimator: SpringForce STIFFNESS_MEDIUM, DAMPING_RATIO_NO_BOUNCY */
+static const qreal PROGRESS_STIFFNESS = 1500.0;
+/* performHapticFeedback(GESTURE_THRESHOLD_ACTIVATE) at most every 100 ms */
+static const qint64 HAPTIC_INTERVAL_MS = 100;
 /* edgeOnly: the strip at the left edge, as BorderGestureArea */
 static const qreal EDGE_FRACTION = 0.1;
 
@@ -38,6 +52,64 @@ BackSwipeArea::BackSwipeArea(QQuickItem *parent) : QQuickItem(parent)
     setFiltersChildMouseEvents(true);
     setAcceptedMouseButtons(Qt::LeftButton);
     setAcceptTouchEvents(true);
+    m_smooth = new WearSpring(this);
+    m_smooth->setStiffness(PROGRESS_STIFFNESS);
+    m_smooth->setDampingRatio(1.0);
+    m_smooth->setVisibilityThreshold(0.0005);
+    connect(m_smooth, &WearSpring::valueChanged, this, &BackSwipeArea::smoothedProgressChanged);
+    connect(this, &QQuickItem::widthChanged, this, &BackSwipeArea::densityChanged);
+    connect(this, &QQuickItem::heightChanged, this, &BackSwipeArea::densityChanged);
+}
+
+qreal BackSwipeArea::dp() const
+{
+    const qreal m = qMin(width(), height());
+    return m > 0 ? m / 192.0 : 2.0;
+}
+
+qreal BackSwipeArea::decideDistance() const
+{
+    return DECIDE_SLOPS * TOUCH_SLOP_DP * dp();
+}
+
+qreal BackSwipeArea::smoothedProgress() const
+{
+    return m_smooth->value();
+}
+
+qreal BackSwipeArea::smoothedVelocity() const
+{
+    return m_smooth->velocity();
+}
+
+bool BackSwipeArea::shouldCommit(qreal dx, qreal velocity, qreal lastDx, qreal w) const
+{
+    const qreal vmin = MIN_VELOCITY_DP * dp();
+    if (velocity >= vmin)
+        return true;
+    if (velocity <= -vmin)
+        return false;
+    const qreal f = qBound<qreal>(0, velocity / vmin, 1);
+    const qreal threshold = w * (COMMIT_FRACTION + (MIN_COMMIT_FRACTION - COMMIT_FRACTION) * f);
+    return dx > threshold && lastDx >= 0;
+}
+
+void BackSwipeArea::setArmed(bool a)
+{
+    if (a == m_armed)
+        return;
+    m_armed = a;
+    emit armedChanged();
+    if (!a)
+        return;
+    /* nothing when it flips back; at most once per 100 ms */
+    if (!m_lastHaptic.isValid() || m_lastHaptic.elapsed() >= HAPTIC_INTERVAL_MS) {
+        m_lastHaptic.start();
+        emit thresholdCrossed();
+        /* GESTURE_THRESHOLD_ACTIVATE is the click primitive at scale 1 on the
+         * Pixel Watch 2 (AndroidOverlayHapticsWeakActuator constant 23) */
+        Haptics::instance()->click();
+    }
 }
 
 void BackSwipeArea::setValue(qreal v)
@@ -50,8 +122,7 @@ void BackSwipeArea::setValue(qreal v)
 
 bool BackSwipeArea::flung() const
 {
-    const qreal dp = qMin(width(), height()) / 192.0;
-    return m_velocity >= FLING_DP_PER_S * dp;
+    return m_velocity >= MIN_VELOCITY_DP * dp();
 }
 
 void BackSwipeArea::setEdgeOnly(bool e)
@@ -76,6 +147,9 @@ void BackSwipeArea::reset()
 {
     m_tracking = false;
     setValue(0);
+    setArmed(false);
+    m_committed = false;
+    m_smooth->snapTo(0);
     if (m_active) {
         m_active = false;
         emit activeChanged();
@@ -180,6 +254,8 @@ bool BackSwipeArea::press(const QPointF &scenePos)
     m_tracking = m_swipeEnabled && isEnabled() && isVisible() && startAllowed(scenePos) && !blockedAt(scenePos);
     m_start = scenePos;
     m_lastX = scenePos.x();
+    m_downX = scenePos.x();
+    m_lastDx = 0;
     m_speed = 0;
     m_lastTime.start();
     return m_tracking;
@@ -192,6 +268,7 @@ bool BackSwipeArea::move(const QPointF &scenePos)
     const qreal dx = scenePos.x() - m_start.x();
     const qreal dy = scenePos.y() - m_start.y();
 
+    m_lastDx = scenePos.x() - m_lastX;
     const qint64 dt = m_lastTime.restart();
     if (dt > 0) {
         const qreal inst = (scenePos.x() - m_lastX) * 1000.0 / dt;
@@ -199,25 +276,30 @@ bool BackSwipeArea::move(const QPointF &scenePos)
     }
     m_lastX = scenePos.x();
 
+    const qreal decide = decideDistance();
     if (!m_active) {
-        if (qAbs(dy) > DECIDE_PX && qAbs(dy) > qAbs(dx)) {
+        if (qAbs(dy) > decide && qAbs(dy) > qAbs(dx)) {
             m_tracking = false;   /* a vertical scroll */
             return false;
         }
-        if (dx < -DECIDE_PX) {
+        if (dx < -decide) {
             m_tracking = false;   /* going left: not back */
             return false;
         }
-        if (dx < DECIDE_PX || qAbs(dy) > dx * MAX_SLOPE)
+        if (dx <= decide || qAbs(dy) >= dx * MAX_SLOPE)
             return false;
         m_active = true;
         /* start from where the decision was made, so nothing jumps */
         m_start.setX(scenePos.x());
+        m_smooth->snapTo(0);
         emit activeChanged();
         emit started();
         return true;
     }
     setValue(qBound<qreal>(0, scenePos.x() - m_start.x(), width()));
+    /* the progress chases the finger on a spring, keeping its speed */
+    m_smooth->animateTo(progress());
+    setArmed(scenePos.x() - m_downX > COMMIT_FRACTION * width() && m_lastDx >= 0);
     return true;
 }
 
@@ -232,9 +314,13 @@ void BackSwipeArea::release(const QPointF &scenePos)
     setKeepMouseGrab(false);
     if (!was)
         return;
-    m_velocity = m_lastTime.elapsed() > 80 ? 0 : m_speed;
+    const qreal vmax = MAX_VELOCITY_DP * dp();
+    m_velocity = qBound(-vmax, m_lastTime.elapsed() > 80 ? 0 : m_speed, vmax);
+    m_committed = shouldCommit(m_lastX - m_downX, m_velocity, m_lastDx, width());
     emit velocityChanged();
     emit finished();
+    /* the user's settle animation takes over from smoothedProgress */
+    m_smooth->stop();
 }
 
 /* A swipe follows one touch point: the one pressed last. Other points in

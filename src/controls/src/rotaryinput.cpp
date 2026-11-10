@@ -5,6 +5,7 @@
 
 #include "rotaryinput.h"
 #include "haptics.h"
+#include "spring.h"
 
 #include <QAbstractAnimation>
 #include <QCoreApplication>
@@ -30,10 +31,12 @@ static const qint64 PRESS_MEMORY_MS = 10000;
 /* Wheel events further apart than this start a new crown gesture: the
  * target is looked up again */
 static const qint64 GESTURE_GAP_MS = 300;
-/* Smoothing time constant of the free scroll: the content covers 63% of
- * the remaining way in this time, so a detent settles in about 100 ms,
- * like Wear OS's rotary scroll animation */
-static const qreal SMOOTHING_MS = 35.0;
+/* Smoothing of the free scroll as Wear OS (androidx RotaryScrollable
+ * RotaryScrollHandler): every event moves a target and the content follows
+ * it on spring() (stiffness 1500, damping 1: 98 % in about 151 ms),
+ * retargeted with its speed kept */
+static const qreal SMOOTHING_STIFFNESS = 1500.0;
+static const qreal SMOOTHING_DAMPING = 1.0;
 /* Wear OS 6 ticks every 21 dp of rotary scroll (config_rotaryEncoderAxis
  * ScrollTickInterval); the Pixel Watch 2 is 192 dp wide at 2 px per dp,
  * so 42 px out of 384: 11% of the window height */
@@ -100,6 +103,7 @@ void RotaryInput::startGlide()
     if (gliding())
         return;
     m_frameTime = 0;
+    m_glideVelocity = 0;
     m_frame->start();
 }
 
@@ -429,9 +433,13 @@ void RotaryInput::animate(qreal dt)
         return;
     }
     const qreal current = f->property(posName(m_horizontal)).toReal();
-    const qreal k = 1 - qExp(-dt / SMOOTHING_MS);
-    qreal next = current + (m_goal - current) * k;
-    const bool done = qAbs(m_goal - next) < 0.5;
+    qreal x, v;
+    SpringMath::step(SMOOTHING_STIFFNESS, SMOOTHING_DAMPING, current - m_goal, m_glideVelocity,
+                     dt / 1000.0, &x, &v);
+    m_glideVelocity = v;
+    qreal next = m_goal + x;
+    /* within half a pixel and moving less than half a pixel a frame */
+    const bool done = qAbs(x) < 0.5 && qAbs(v) < 30;
     if (done)
         next = m_goal;
     f->setProperty(posName(m_horizontal), next);

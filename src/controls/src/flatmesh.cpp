@@ -37,6 +37,7 @@
 #include <QMouseEvent>
 #include <QLoggingCategory>
 #include <MDConfItem>
+#include "spring.h"
 
 Q_STATIC_LOGGING_CATEGORY(lcFlatMesh, "asteroid.flatmesh", QtWarningMsg)
 
@@ -157,6 +158,8 @@ FlatMesh::FlatMesh(QQuickItem *parent) : QQuickItem(parent),
     m_lastActivity.start();
 
     connect(this, &QQuickItem::visibleChanged, this, &FlatMesh::onVisibleChanged);
+    /* Accessibility > Reduce animations: the mesh stays still */
+    connect(ReduceMotion::instance(), &ReduceMotion::changed, this, &FlatMesh::maybeEnableAnimation);
 
     setFlag(ItemHasContents);
     setAnimated(true);
@@ -275,7 +278,8 @@ bool FlatMesh::windowShowing() const
 void FlatMesh::maybeEnableAnimation()
 {
     const Motion m = effectiveMotion();
-    bool run = m_animated && m != Static && isVisible() && windowShowing();
+    bool run = m_animated && m != Static && isVisible() && windowShowing()
+            && !ReduceMotion::instance()->enabled();
     if (run && m == AfterInput && m_lastActivity.elapsed() >= idleTimeout())
         run = false;
     if (run == isRunning())
