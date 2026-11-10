@@ -62,6 +62,7 @@ set(controls
         TextArea
         TextBase
         TextField
+        Theme
         TimeText
         ValueMeter
         WearKeyboard
@@ -72,6 +73,7 @@ foreach(control ${controls})
 endforeach()
 
 set_source_files_properties(qml/Dims.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt6_add_qml_module(asteroidcontrolsplugin
     URI org.asteroid.controls

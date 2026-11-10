@@ -37,8 +37,10 @@ import org.asteroid.utils
     import org.asteroid.controls
 
     Application {
-        // show a purple-ish flat mesh background
+        // Wear OS applications are black (Theme.color.background); this one
+        // opts in to the animated flat mesh background instead
         id: myapp
+        meshBackground: true
         centerColor: "#00010B"
         outerColor: "#E044A6"
         // make all indicators visible
@@ -57,16 +59,29 @@ import org.asteroid.utils
 */
 
 Application_p {
+    id: _application
     anchors.fill: parent
 
     /*!
-        Outer color for the flat mesh.
+        Draw the animated \l FlatMesh gradient behind the content. Off by
+        default: every Wear OS application screen is plain black
+        (colorScheme.background, AppScaffoldKt.java:28), which also leaves
+        the AMOLED pixels off and the GPU idle after touches. Upstream
+        applications that want the mesh set this to true.
      */
-    property alias outerColor: fm.outerColor
+    property bool meshBackground: false
     /*!
-        Inner color for the flat mesh.
+        The background colour: \l Theme color.background (#000000).
      */
-    property alias centerColor: fm.centerColor
+    property color backgroundColor: Theme.color.background
+    /*!
+        Outer color for the flat mesh (only drawn with meshBackground).
+     */
+    property color outerColor: "#df4829"
+    /*!
+        Inner color for the flat mesh (only drawn with meshBackground).
+     */
+    property color centerColor: "#ffaa39"
 
     function animIndicators() {
         rightIndicator.animate();
@@ -75,10 +90,23 @@ Application_p {
         bottomIndicator.animate();
     }
 
-    FlatMesh {
-        id: fm
+    Rectangle {
+        id: _background
         anchors.fill: parent
         anchors.bottomMargin: -DeviceSpecs.flatTireHeight
+        color: backgroundColor
+        visible: !meshBackground
+    }
+
+    Loader {
+        id: _mesh
+        anchors.fill: parent
+        anchors.bottomMargin: -DeviceSpecs.flatTireHeight
+        active: meshBackground
+        sourceComponent: FlatMesh {
+            centerColor: _application.centerColor
+            outerColor: _application.outerColor
+        }
     }
 
     /*!
