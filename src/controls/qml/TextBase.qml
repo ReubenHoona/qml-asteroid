@@ -36,7 +36,8 @@ FocusScope {
 
     property var editor
     property bool previewTextActive: !editor.activeFocus && text.length === 0
-    property int fontPixelSize: 32
+    // bodyLarge (32 px at font scale 1.0), follows Display size & text
+    property real fontPixelSize: Theme.type.bodyLarge.pixelSize
     property string previewText
     property int enterKeyAction: EnterKeyAction.None
     property string enterKeyText
@@ -127,7 +128,7 @@ FocusScope {
         color: "#a0a1a2"
         visible: previewTextActive
         text: textBase.previewText
-        font.pixelSize: 28
+        font.pixelSize: Theme.type.bodyMedium.pixelSize
         anchors { left: parent.left; right: parent.right; margins: 12 }
 
     }
