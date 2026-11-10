@@ -30,6 +30,10 @@ static const qreal COMMIT_FRACTION = 0.33;
 static const qreal MIN_COMMIT_FRACTION = 0.10;
 static const qreal MIN_VELOCITY_DP = 500.0;
 static const qreal MAX_VELOCITY_DP = 8000.0;
+/* "flung" keeps the threshold it had before the stock commit rule (125 dp/s)
+ * so callers still deciding with `progress >= 0.5 || flung` behave as
+ * before; new code uses "committed" (stock's rule) */
+static const qreal LEGACY_FLING_DP = 125.0;
 /* BackProgressAnimator: SpringForce STIFFNESS_MEDIUM, DAMPING_RATIO_NO_BOUNCY */
 static const qreal PROGRESS_STIFFNESS = 1500.0;
 /* performHapticFeedback(GESTURE_THRESHOLD_ACTIVATE) at most every 100 ms */
@@ -122,7 +126,7 @@ void BackSwipeArea::setValue(qreal v)
 
 bool BackSwipeArea::flung() const
 {
-    return m_velocity >= MIN_VELOCITY_DP * dp();
+    return m_velocity >= LEGACY_FLING_DP * dp();
 }
 
 void BackSwipeArea::setEdgeOnly(bool e)

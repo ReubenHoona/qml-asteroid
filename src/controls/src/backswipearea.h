@@ -46,6 +46,9 @@ class BackSwipeArea : public QQuickItem
     Q_PROPERTY(qreal value READ value WRITE setValue NOTIFY valueChanged)
     Q_PROPERTY(qreal progress READ progress NOTIFY valueChanged)
     Q_PROPERTY(qreal velocity READ velocity NOTIFY velocityChanged)
+    /* Deprecated: 125 dp/s (250 px/s) or more to the right on release, the
+     * old quick-flick test kept for callers that still decide with
+     * `progress >= 0.5 || flung`. Use "committed" (stock's rule). */
     Q_PROPERTY(bool flung READ flung NOTIFY velocityChanged)
     Q_PROPERTY(bool committed READ committed NOTIFY velocityChanged)
     Q_PROPERTY(bool armed READ armed NOTIFY armedChanged)

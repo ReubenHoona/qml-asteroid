@@ -12,6 +12,14 @@
 #include <QScreen>
 #include <QtMath>
 
+#include <qpa/qplatformtheme.h>
+#include <private/qguiapplication_p.h>
+
+/* dynamic property naming the ScrollPhysics that drives a Flickable */
+static const char PHYSICS_PROPERTY[] = "_asteroidScrollPhysics";
+/* an application may opt a view out of the global stock fling */
+static const char OPT_OUT_PROPERTY[] = "asteroidStockFling";
+
 /* Qt's Flickable reports half the finger's travel past an end as overshoot
  * (QQuickFlickablePrivate::drag: newY = minY + (newY - minY) / 2) */
 static const qreal QT_DRAG_OVERSHOOT_GAIN = 2.0;
@@ -39,6 +47,46 @@ ScrollPhysics::ScrollPhysics(QObject *parent) : QObject(parent)
 ScrollPhysics::~ScrollPhysics()
 {
     m_driver->stop();
+    if (m_flickable && physicsOf(m_flickable) == this)
+        m_flickable->setProperty(PHYSICS_PROPERTY, QVariant());
+}
+
+ScrollPhysics *ScrollPhysics::physicsOf(QQuickItem *flickable)
+{
+    if (!flickable)
+        return nullptr;
+    return qobject_cast<ScrollPhysics *>(flickable->property(PHYSICS_PROPERTY).value<QObject *>());
+}
+
+static qreal themeHint(QPlatformTheme::ThemeHint hint, qreal fallback)
+{
+    const QPlatformTheme *theme = QGuiApplicationPrivate::platformTheme();
+    return theme ? theme->themeHint(hint).toReal() : fallback;
+}
+
+bool ScrollPhysics::installStockFling(QQuickItem *f)
+{
+    if (!f || !f->inherits("QQuickFlickable"))
+        return false;
+    if (physicsOf(f))
+        return true;
+    const QVariant optIn = f->property(OPT_OUT_PROPERTY);
+    if (optIn.isValid() && !optIn.toBool())
+        return false;
+    /* the application tuned its own physics (Qt's defaults: 2500 px/s,
+     * 1500 px/s^2, qplatformtheme.cpp FlickMaximumVelocity/Deceleration) */
+    if (!qFuzzyCompare(f->property("maximumFlickVelocity").toReal(),
+                       themeHint(QPlatformTheme::FlickMaximumVelocity, 2500))
+            || !qFuzzyCompare(f->property("flickDeceleration").toReal(),
+                              themeHint(QPlatformTheme::FlickDeceleration, 1500)))
+        return false;
+    ScrollPhysics *p = new ScrollPhysics(f);
+    p->m_global = true;
+    p->m_stretchEnabled = false;
+    p->m_flickable = f;
+    p->m_complete = true;
+    p->attach();
+    return true;
 }
 
 QQuickItem *ScrollPhysics::flickable() const
@@ -94,14 +142,32 @@ void ScrollPhysics::attach()
     QQuickItem *f = m_flickable;
     if (!f || !f->inherits("QQuickFlickable"))
         return;
-    /* the finger may pull past an end (that is the stretch), the content
-     * itself stops at the bounds; the speed limit is stock's */
-    f->setProperty("boundsBehavior", 1);   /* Flickable.DragOverBounds */
-    f->setProperty("boundsMovement", 0);   /* Flickable.StopAtBounds */
+    /* one ScrollPhysics per Flickable: an explicit one replaces the global
+     * fling-only one */
+    ScrollPhysics *other = physicsOf(f);
+    if (other && other != this) {
+        if (!other->m_global || m_global)
+            return;
+        other->stop();
+        for (const QMetaObject::Connection &c : std::as_const(other->m_connections))
+            disconnect(c);
+        other->m_connections.clear();
+        other->m_flickable = nullptr;
+        other->deleteLater();
+    }
+    f->setProperty(PHYSICS_PROPERTY, QVariant::fromValue<QObject *>(this));
+    if (!m_global) {
+        /* the finger may pull past an end (that is the stretch), the content
+         * itself stops at the bounds */
+        f->setProperty("boundsBehavior", 1);   /* Flickable.DragOverBounds */
+        f->setProperty("boundsMovement", 0);   /* Flickable.StopAtBounds */
+    }
+    /* the speed limit is stock's */
     f->setProperty("maximumFlickVelocity", maximumVelocity());
     m_connections << connect(f, SIGNAL(flickStarted()), this, SLOT(onFlickStarted()));
     m_connections << connect(f, SIGNAL(draggingChanged()), this, SLOT(onDraggingChanged()));
-    m_connections << connect(f, SIGNAL(verticalOvershootChanged()), this, SLOT(onOvershootChanged()));
+    if (!m_global)
+        m_connections << connect(f, SIGNAL(verticalOvershootChanged()), this, SLOT(onOvershootChanged()));
     m_connections << connect(f, SIGNAL(contentYChanged()), this, SLOT(onContentYChanged()));
 }
 
@@ -202,6 +268,12 @@ void ScrollPhysics::onFlickStarted()
     const int dir = f->property("flickableDirection").toInt();
     /* Flickable.HorizontalFlick is 1 */
     if (dir == 1)
+        return;
+    /* a flick that also goes sideways, or a view that snaps (ListView
+     * snapMode, StrictlyEnforceRange): Qt's own flick does that */
+    if (f->property("horizontalVelocity").toReal() != 0)
+        return;
+    if (f->property("snapMode").toInt() != 0 || f->property("highlightRangeMode").toInt() == 2)
         return;
     const qreal v = f->property("verticalVelocity").toReal();
     if (v == 0)
