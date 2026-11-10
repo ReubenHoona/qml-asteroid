@@ -19,8 +19,11 @@
 #include <QQuickWindow>
 #include <QTouchEvent>
 #include <QWheelEvent>
+#include <QLineF>
 #include <QtMath>
 #include <MDConfItem>
+
+#include <cmath>
 
 #include <private/qquickitem_p.h>
 #include <private/qquickpointerhandler_p.h>
@@ -39,20 +42,70 @@ static const qint64 GESTURE_GAP_MS = 300;
 static const qreal SMOOTHING_STIFFNESS = 1500.0;
 static const qreal SMOOTHING_DAMPING = 1.0;
 /* Wear OS 6 ticks every 21 dp of rotary scroll (config_rotaryEncoderAxis
- * ScrollTickInterval); the Pixel Watch 2 is 192 dp wide at 2 px per dp,
- * so 42 px out of 384: 11% of the window height */
+ * ScrollTickInterval, VALUES.tsv values-watch); the Pixel Watch 2 is 192 dp
+ * wide at 2 px per dp, so 42 px out of 384: 11% of the window height */
 static const qreal TICK_FRACTION = 42.0 / 384.0;
-/* Crown speed (detents per second) where the rotary "fling" gain starts and
- * where it reaches its maximum */
+static const qreal WINDOW_DP = 192.0;
+/* crown-fast (the user's choice 2): crown speed (detents per second) where
+ * the rotary gain starts and where it reaches its maximum */
 static const qreal FAST_FROM = 4.0;
 static const qreal FAST_TO = 12.0;
 static const qreal MAX_GAIN = 3.0;
+
+/* Stock CP3A crown (choice 2 off), choice-settings-04: AXIS_SCROLL per
+ * count = |device.scalingFactor| 0.0117 (pixart_pat9126.idc), a view scrolls
+ * AXIS_SCROLL x config_verticalScrollFactor 64 dp: 0.749 dp = 1.4976 px per
+ * count at 2 px/dp; 360 counts (device.res 57.296 per radian) = 539 px a
+ * turn. No speed gain. */
+static const qreal STOCK_SCALING_FACTOR = 0.0117;
+static const qreal STOCK_SCROLL_FACTOR_DP = 64.0;
+/* Input slop (motion-transitions-25; pixart_pat9126.idc
+ * rotary_encoder.slop_threshold 12, slop_duration_ms 500; AOSP
+ * SlopController): after 500 ms without rotation, or when the direction
+ * reverses, the first 12 counts are dropped and only the excess passes */
+static const qreal SLOP_COUNTS = 12.0;
+static const qint64 SLOP_DURATION_MS = 500;
+/* Crown fling (motion-transitions-24; androidx RotaryScrollable
+ * HighResFlingTimeframe 30 ms, flingScaleFactor 0.7; VALUES.tsv
+ * config_viewMin/MaxRotaryEncoderFlingVelocity 500 / 2750 dp/s): the fling
+ * starts 30 ms after the last event when the events came at most 60 ms
+ * apart and the scaled speed is over 500 dp/s */
+static const qint64 FLING_TIMEFRAME_MS = 30;
+static const qreal FLING_SCALE = 0.7;
+static const qint64 FLING_EVENT_GAP_MS = 60;
+static const qint64 FLING_HORIZON_MS = 100;
+static const qreal MIN_ROTARY_FLING_DP = 500.0;
+static const qreal MAX_ROTARY_FLING_DP = 2750.0;
+/* Stock rotary snap (motion-transitions-26; androidx RotaryScrollable
+ * ThresholdHandler, RotarySnapSensitivityValues, RotarySnapHandler):
+ * threshold = itemSize / lerp(minDivider, maxDivider,
+ * CubicBezier(0.5, 0, 0.5, 1)((v - 300) / 2700)), v smoothed with 0.4;
+ * Default (lists, pickers) 1 -> 1.5, High (pagers) 5 -> 7.5; at most 2
+ * snaps per event; 200 ms between events breaks the gesture; the snap
+ * glides on a spring of stiffness 200 */
+static const qreal SNAP_MIN_VELOCITY = 300.0;
+static const qreal SNAP_MAX_VELOCITY = 3000.0;
+static const qreal SNAP_VELOCITY_SMOOTHING = 0.4;
+static const qreal SNAP_DIVIDER_MIN = 1.0;
+static const qreal SNAP_DIVIDER_MAX = 1.5;
+static const qreal PAGER_DIVIDER_MIN = 5.0;
+static const qreal PAGER_DIVIDER_MAX = 7.5;
+static const int MAX_SNAPS_PER_EVENT = 2;
+static const qint64 SNAP_GESTURE_BREAK_MS = 200;
+static const qreal SNAP_STIFFNESS = 200.0;
+/* Rotary overscroll exit (motion-transitions-16; SysUI ihx/kwg
+ * ScrollAccumulator, scroll_accumulated_slop_threshold 96 raised to 150 by
+ * SysUIOverlayScrollSlop150; a gap over 120 ms resets the sum) */
+static const qreal EXIT_THRESHOLD_PX = 150.0;
+static const qint64 EXIT_GAP_MS = 120;
 
 static const char KEY_ENABLED[] = "/org/asteroidos/ux/rotary";
 static const char KEY_INVERT[] = "/org/asteroidos/ux/rotary-invert";
 static const char KEY_PX[] = "/org/asteroidos/ux/rotary-px-per-count";
 static const char KEY_DETENT[] = "/org/asteroidos/ux/rotary-counts-per-detent";
 static const char KEY_INDICATOR[] = "/org/asteroidos/ux/position-indicator";
+/* Settings > Buttons > Faster crown scrolling (choice 2) */
+static const char KEY_FAST[] = "/org/asteroidos/ux/crown-fast";
 
 class RotaryFrames : public QAbstractAnimation
 {
@@ -86,12 +139,18 @@ RotaryInput::RotaryInput(QObject *parent) : QObject(parent),
     m_invert(new MDConfItem(QLatin1String(KEY_INVERT), this)),
     m_pxPerCount(new MDConfItem(QLatin1String(KEY_PX), this)),
     m_countsPerDetent(new MDConfItem(QLatin1String(KEY_DETENT), this)),
-    m_indicatorEnabled(new MDConfItem(QLatin1String(KEY_INDICATOR), this))
+    m_indicatorEnabled(new MDConfItem(QLatin1String(KEY_INDICATOR), this)),
+    m_fastItem(new MDConfItem(QLatin1String(KEY_FAST), this))
 {
-    for (MDConfItem *item : {m_enabled, m_invert, m_pxPerCount, m_countsPerDetent, m_indicatorEnabled})
+    for (MDConfItem *item : {m_enabled, m_invert, m_pxPerCount, m_countsPerDetent, m_indicatorEnabled, m_fastItem})
         connect(item, &MDConfItem::valueChanged, this, &RotaryInput::readSettings);
     readSettings();
     m_frame = new RotaryFrames(this);
+    m_clock.start();
+    /* one shot per crown pause, never periodic */
+    m_flingTimer.setSingleShot(true);
+    m_flingTimer.setInterval(int(FLING_TIMEFRAME_MS));
+    connect(&m_flingTimer, &QTimer::timeout, this, &RotaryInput::maybeFling);
 }
 
 bool RotaryInput::gliding() const
@@ -119,6 +178,24 @@ void RotaryInput::readSettings()
     const qreal px = m_pxPerCount->value(0).toDouble(&ok);
     m_px = ok && px > 0 ? px : 0;
     m_indicatorOn = m_indicatorEnabled->value(true).toBool();
+    const bool fast = m_fastItem->value(true).toBool();
+    if (fast != m_fast) {
+        m_fast = fast;
+        m_slopSum = 0;
+        m_slopMet = false;
+        m_slopTime.invalidate();
+        m_pending = 0;
+        m_samples.clear();
+        m_flinging = false;
+    }
+}
+
+/* px per dp: the Pixel Watch 2's window is 192 dp wide */
+static qreal densityOf(QQuickItem *item)
+{
+    const QQuickWindow *w = item ? item->window() : nullptr;
+    const qreal h = w ? qMin(w->width(), w->height()) : 384;
+    return h > 0 ? h / WINDOW_DP : 2.0;
 }
 
 static qreal tickPx(QQuickItem *item)
@@ -126,6 +203,46 @@ static qreal tickPx(QQuickItem *item)
     const QQuickWindow *w = item ? item->window() : nullptr;
     const qreal h = w ? qMin(w->width(), w->height()) : 384;
     return qMax<qreal>(8, h * TICK_FRACTION);
+}
+
+qreal RotaryInput::pxPerCount(QQuickItem *item) const
+{
+    if (!m_fast)
+        return STOCK_SCALING_FACTOR * STOCK_SCROLL_FACTOR_DP * densityOf(item);
+    return m_px > 0 ? m_px : tickPx(item) / m_detent;
+}
+
+/* CubicBezier(x1, y1, x2, y2) easing at x (compose CubicBezierEasing) */
+static qreal cubicBezier(qreal x1, qreal y1, qreal x2, qreal y2, qreal x)
+{
+    auto b = [](qreal p1, qreal p2, qreal t) {
+        const qreal u = 1 - t;
+        return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
+    };
+    qreal lo = 0, hi = 1, t = x;
+    for (int i = 0; i < 32; i++) {
+        t = (lo + hi) / 2;
+        if (b(x1, x2, t) < x)
+            lo = t;
+        else
+            hi = t;
+    }
+    return b(y1, y2, t);
+}
+
+static bool hasExitSignal(QObject *o)
+{
+    return o && o->metaObject()->indexOfSignal("rotaryExit(int)") >= 0;
+}
+
+/* The item (the view or an ancestor) that handles the rotary exit */
+static QObject *exitReceiverFor(QQuickItem *item)
+{
+    for (QQuickItem *i = item; i; i = i->parentItem()) {
+        if (hasExitSignal(i))
+            return i;
+    }
+    return nullptr;
 }
 
 bool RotaryInput::eventFilter(QObject *watched, QEvent *event)
@@ -173,8 +290,11 @@ void RotaryInput::notePress(QQuickWindow *window, const QPointF &pos)
     m_pressWindow = window;
     m_pressPos = pos;
     m_pressTime.start();
-    /* a finger takes over from a crown scroll still gliding */
+    /* a finger takes over from a crown scroll still gliding or flinging */
     m_frame->stop();
+    m_flinging = false;
+    m_flingTimer.stop();
+    m_samples.clear();
     /* the next crown event looks the target up again, under this touch */
     m_lastEvent.invalidate();
     Kind kind = None;
@@ -258,25 +378,37 @@ static bool effectivelyVisible(QQuickItem *item)
     return true;
 }
 
+struct Found {
+    QQuickItem *best = nullptr;
+    int bestDepth = -1;
+    int bestKind = 0;
+    QQuickItem *exit = nullptr;   /* deepest item with a rotaryExit signal */
+    int exitDepth = -1;
+    bool blocked = false;
+};
+
 /* Depth-first over the whole item tree in paint order: the last scrollable
  * view under pos that is drawn on top (the deepest one wins among nested
  * views), and whether any item under pos wants raw wheel events */
-static void collect(QQuickItem *item, const QPointF &scenePos, int depth,
-                    QQuickItem **best, int *bestDepth, bool *blocked,
-                    RotaryInput::Kind (*kindOf)(QQuickItem *), int *bestKind)
+static void collect(QQuickItem *item, const QPointF &scenePos, int depth, Found *f,
+                    RotaryInput::Kind (*kindOf)(QQuickItem *))
 {
     if (!item->isVisible() || item->opacity() <= 0.0)
         return;
     const QPointF p = item->mapFromScene(scenePos);
     const bool inside = item->contains(p);
     if (inside && hasWheelHandler(item))
-        *blocked = true;
+        f->blocked = true;
     if (inside) {
         const RotaryInput::Kind k = kindOf(item);
-        if (k != 0 && depth >= *bestDepth) {
-            *best = item;
-            *bestDepth = depth;
-            *bestKind = k;
+        if (k != 0 && depth >= f->bestDepth) {
+            f->best = item;
+            f->bestDepth = depth;
+            f->bestKind = k;
+        }
+        if (depth >= f->exitDepth && hasExitSignal(item) && item->isEnabled()) {
+            f->exit = item;
+            f->exitDepth = depth;
         }
     }
     /* children can lie outside their parent: keep going unless the parent
@@ -285,20 +417,45 @@ static void collect(QQuickItem *item, const QPointF &scenePos, int depth,
         return;
     const QList<QQuickItem *> children = QQuickItemPrivate::get(item)->paintOrderChildItems();
     for (QQuickItem *child : children)
-        collect(child, scenePos, depth + 1, best, bestDepth, blocked, kindOf, bestKind);
+        collect(child, scenePos, depth + 1, f, kindOf);
 }
 
 QQuickItem *RotaryInput::findTarget(QQuickWindow *window, const QPointF &pos, Kind *kind, bool *blocked) const
 {
-    QQuickItem *best = nullptr;
-    int bestDepth = -1;
-    int bestKind = None;
-    *blocked = false;
-    collect(window->contentItem(), pos, 0, &best, &bestDepth, blocked, &RotaryInput::kindOf, &bestKind);
-    *kind = Kind(bestKind);
+    Found f;
+    collect(window->contentItem(), pos, 0, &f, &RotaryInput::kindOf);
+    *blocked = f.blocked;
+    *kind = Kind(f.bestKind);
+    QQuickItem *best = f.best;
     if (best && !effectivelyVisible(best))
         best = nullptr;
+    /* nothing to scroll, but a tray that the crown closes (a short
+     * notification list): the crown pushes past its end at once */
+    if (!best && f.exit && effectivelyVisible(f.exit)) {
+        best = f.exit;
+        *kind = Exit;
+    }
     return best;
+}
+
+/* AOSP SlopController::consumeEvent: the counts that pass */
+qreal RotaryInput::applySlop(qreal counts)
+{
+    const bool reset = !m_slopTime.isValid() || m_slopTime.elapsed() >= SLOP_DURATION_MS
+            || (m_slopSum > 0) != (counts > 0) || qFuzzyIsNull(m_slopSum);
+    if (reset) {
+        m_slopSum = 0;
+        m_slopMet = false;
+    }
+    m_slopTime.start();
+    if (m_slopMet)
+        return counts;
+    m_slopSum += counts;
+    if (qAbs(m_slopSum) >= SLOP_COUNTS) {
+        m_slopMet = true;
+        return (counts > 0 ? 1 : -1) * (qAbs(m_slopSum) - SLOP_COUNTS);
+    }
+    return 0;
 }
 
 bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
@@ -308,6 +465,16 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
         counts = event->angleDelta().x() / 120.0;
     if (qFuzzyIsNull(counts))
         return false;
+
+    /* Stock: the input layer drops the first counts after a rest */
+    if (!m_fast) {
+        counts = applySlop(counts);
+        if (qFuzzyIsNull(counts)) {
+            qCDebug(lcRotary) << "slop" << event->angleDelta() << m_slopSum;
+            event->accept();
+            return true;
+        }
+    }
 
     /* A new crown gesture: find what to drive */
     const bool newGesture = !m_lastEvent.isValid() || m_lastEvent.elapsed() > GESTURE_GAP_MS
@@ -327,11 +494,18 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
         }
         if (m_target != t || m_kind != kind) {
             m_frame->stop();
+            m_flinging = false;
+            m_flingTimer.stop();
+            m_samples.clear();
             m_pending = 0;
+            m_tickAcc = 0;
+            m_limitArmed = true;
+            m_exitSum = 0;
         }
         m_target = t;
         m_kind = kind;
         m_speed = 0;
+        m_exitReceiver = exitReceiverFor(t);
         if (kind == Free)
             m_horizontal = !scrollsVertically(t) && scrollsHorizontally(t);
         else if (kind == Snap)
@@ -342,8 +516,9 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
     }
 
     /* crown speed in detents per second, smoothed over a few events */
+    const qint64 gapMs = m_lastEvent.isValid() ? m_lastEvent.elapsed() : -1;
     if (m_lastEvent.isValid()) {
-        const qreal dt = qMax<qint64>(1, m_lastEvent.elapsed()) / 1000.0;
+        const qreal dt = qMax<qint64>(1, gapMs) / 1000.0;
         const qreal inst = qAbs(counts) / m_detent / dt;
         m_speed = newGesture ? 0 : m_speed * 0.7 + qMin<qreal>(inst, 60) * 0.3;
     }
@@ -362,21 +537,94 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
     case Free:
         scrollFree(forward);
         break;
+    case Exit:
+        /* nothing scrolls: every count pushes past the end */
+        if (!pushPastEnd(forward * pxPerCount(m_target)))
+            return false;
+        break;
     case Snap:
-    case Path: {
-        m_pending += forward;
-        const int steps = int(m_pending / m_detent);
-        if (steps != 0) {
-            m_pending -= steps * m_detent;
-            stepSnap(steps);
+    case Path:
+        if (m_fast) {
+            /* the user's crown: one item per detent */
+            m_pending += forward;
+            const int steps = int(m_pending / m_detent);
+            if (steps != 0) {
+                m_pending -= steps * m_detent;
+                stepSnap(steps);
+            }
+        } else {
+            /* stock: a speed-dependent share of the item size */
+            const qreal px = forward * pxPerCount(m_target);
+            if (gapMs < 0 || gapMs > SNAP_GESTURE_BREAK_MS || newGesture) {
+                m_pending = 0;
+                m_snapVelocity = 0;
+            } else {
+                const qreal v = qAbs(px) / qMax<qint64>(1, gapMs) * 1000.0;
+                m_snapVelocity = v * SNAP_VELOCITY_SMOOTHING + (1 - SNAP_VELOCITY_SMOOTHING) * m_snapVelocity;
+            }
+            const qreal threshold = snapThreshold(px);
+            m_pending += px;
+            int steps = int(m_pending / threshold);
+            if (steps != 0) {
+                m_pending -= steps * threshold;
+                steps = qBound(-MAX_SNAPS_PER_EVENT, steps, MAX_SNAPS_PER_EVENT);
+                if (qAbs(m_pending) >= threshold)
+                    m_pending = std::fmod(m_pending, threshold);
+                stepSnap(steps);
+            }
         }
         break;
-    }
     default:
         return false;
     }
     event->accept();
     return true;
+}
+
+/* Stock snap threshold in crown px for the current smoothed speed */
+qreal RotaryInput::snapThreshold(qreal px)
+{
+    Q_UNUSED(px)
+    const qreal u = qBound<qreal>(0, (m_snapVelocity - SNAP_MIN_VELOCITY)
+                                  / (SNAP_MAX_VELOCITY - SNAP_MIN_VELOCITY), 1);
+    const qreal e = cubicBezier(0.5, 0, 0.5, 1, u);
+    /* pagers (one item per page) use the High sensitivity dividers */
+    const bool pager = m_kind == Snap && m_target && m_target->property("snapMode").toInt() == 2;
+    const qreal divider = pager ? PAGER_DIVIDER_MIN + (PAGER_DIVIDER_MAX - PAGER_DIVIDER_MIN) * e
+                                : SNAP_DIVIDER_MIN + (SNAP_DIVIDER_MAX - SNAP_DIVIDER_MIN) * e;
+    return qMax<qreal>(1, itemSize() / divider);
+}
+
+/* The size of one item along the crown's axis (with the view's spacing) */
+qreal RotaryInput::itemSize() const
+{
+    QQuickItem *v = m_target;
+    if (!v)
+        return 42;
+    const int index = v->property("currentIndex").toInt();
+    QQuickItem *cur = nullptr;
+    QMetaObject::invokeMethod(v, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, cur), Q_ARG(int, index));
+    if (m_kind == Path) {
+        /* items sit along the path: the distance between two neighbours */
+        QQuickItem *next = nullptr;
+        const int count = v->property("count").toInt();
+        QMetaObject::invokeMethod(v, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, next),
+                                  Q_ARG(int, (index + 1) % qMax(1, count)));
+        if (cur && next && cur != next) {
+            const QPointF a = cur->mapToItem(v, QPointF(cur->width() / 2, cur->height() / 2));
+            const QPointF b = next->mapToItem(v, QPointF(next->width() / 2, next->height() / 2));
+            const qreal d = QLineF(a, b).length();
+            if (d >= 1)
+                return d;
+        }
+        return cur && cur->height() >= 1 ? cur->height() : tickPx(v);
+    }
+    if (!cur)
+        cur = qvariant_cast<QQuickItem *>(v->property("currentItem"));
+    const qreal size = cur ? (m_horizontal ? cur->width() : cur->height()) : 0;
+    if (size < 1)
+        return tickPx(v);
+    return size + qMax<qreal>(0, v->property("spacing").toReal());
 }
 
 static qreal minPos(QQuickItem *f, bool horizontal)
@@ -401,30 +649,83 @@ static const char *posName(bool horizontal)
     return horizontal ? "contentX" : "contentY";
 }
 
+/* The end bump (SCROLL_LIMIT): once per end, armed again when the view has
+ * moved (stock HapticScrollFeedbackProvider mCanPlayLimitFeedback) */
+void RotaryInput::playLimit(qreal pos)
+{
+    if (!m_limitArmed && qAbs(pos - m_limitPos) < 1)
+        return;
+    m_limitArmed = false;
+    m_limitPos = pos;
+    Haptics::instance()->scrollLimit();
+}
+
+/* The crown pushes px past an end. True when a rotary exit receiver took it
+ * (then no end bump: stock consumes the event while it accumulates). */
+bool RotaryInput::pushPastEnd(qreal px)
+{
+    QObject *r = m_exitReceiver;
+    if (!r || qFuzzyIsNull(px))
+        return false;
+    const int dir = px > 0 ? 1 : -1;
+    const QVariant edge = r->property("rotaryExitEdge");
+    if (edge.isValid() && edge.toInt() != 0 && edge.toInt() != dir)
+        return false;
+    if (!m_exitTime.isValid() || m_exitTime.elapsed() > EXIT_GAP_MS
+            || (!qFuzzyIsNull(m_exitSum) && (m_exitSum > 0) != (px > 0)))
+        m_exitSum = 0;
+    m_exitTime.start();
+    m_exitSum += px;
+    if (qAbs(m_exitSum) > EXIT_THRESHOLD_PX) {
+        m_exitSum = 0;
+        qCDebug(lcRotary) << "rotary exit" << dir << r;
+        QMetaObject::invokeMethod(r, "rotaryExit", Q_ARG(int, dir));
+    }
+    return true;
+}
+
 void RotaryInput::scrollFree(qreal forward)
 {
     QQuickItem *f = m_target;
-    const qreal tick = tickPx(f);
-    const qreal pxPerCount = m_px > 0 ? m_px : tick / m_detent;
-    const qreal fast = qBound<qreal>(0, (m_speed - FAST_FROM) / (FAST_TO - FAST_FROM), 1);
-    const qreal gain = 1 + (MAX_GAIN - 1) * fast * fast * (3 - 2 * fast);
+    qreal gain = 1;
+    if (m_fast) {
+        const qreal fast = qBound<qreal>(0, (m_speed - FAST_FROM) / (FAST_TO - FAST_FROM), 1);
+        gain = 1 + (MAX_GAIN - 1) * fast * fast * (3 - 2 * fast);
+    }
+    const qreal px = forward * pxPerCount(f) * gain;
 
     const qreal current = f->property(posName(m_horizontal)).toReal();
     if (!gliding()) {
         /* starting from rest: stop a finger fling first */
         QMetaObject::invokeMethod(f, "cancelFlick");
         m_goal = current;
-        m_lastTickPos = current;
     }
+    /* the crown takes over from its own fling where the fling has got to */
+    m_flinging = false;
     const qreal lo = minPos(f, m_horizontal);
     const qreal hi = maxPos(f, m_horizontal);
-    const qreal wanted = m_goal + forward * pxPerCount * gain;
+    const qreal before = m_goal;
+    const qreal wanted = m_goal + px;
     m_goal = qBound(lo, wanted, hi);
-    if (wanted != m_goal && qAbs(current - m_goal) < 1) {
-        /* pushing against an end that is already reached */
-        Haptics::instance()->limit();
+    const qreal applied = m_goal - before;
+    if (qAbs(applied) < 0.01) {
+        /* pushing against an end */
+        if (!pushPastEnd(px))
+            playLimit(m_goal);
         return;
     }
+    m_exitSum = 0;
+    m_limitArmed = true;
+    /* SCROLL_TICK every 21 dp of crown scroll, the remainder carried over
+     * (stock HapticScrollFeedbackProvider.onScrollProgress) */
+    const qreal tick = tickPx(f);
+    m_tickAcc += applied;
+    if (qAbs(m_tickAcc) >= tick) {
+        m_tickAcc = std::fmod(m_tickAcc, tick);
+        Haptics::instance()->scrollTick();
+    }
+    if (!m_fast)
+        noteFlingSample(px);
     if (m_indicatorOn && !m_horizontal)
         showIndicator(f, true);
     if (!gliding()) {
@@ -432,32 +733,79 @@ void RotaryInput::scrollFree(qreal forward)
     }
 }
 
+void RotaryInput::noteFlingSample(qreal px)
+{
+    const qint64 now = m_clock.elapsed();
+    if (!m_samples.isEmpty() && (now - m_samples.last().first > FLING_EVENT_GAP_MS
+                                 || (m_samples.last().second > 0) != (px > 0)))
+        m_samples.clear();
+    m_samples.append(qMakePair(now, px));
+    while (m_samples.size() > 2 && now - m_samples.first().first > FLING_HORIZON_MS)
+        m_samples.removeFirst();
+    m_flingTimer.start();
+}
+
+/* 30 ms after the last crown event: fling when the crown was fast */
+void RotaryInput::maybeFling()
+{
+    const QList<QPair<qint64, qreal>> samples = m_samples;
+    m_samples.clear();
+    QQuickItem *f = m_target;
+    if (m_fast || m_kind != Free || !f || samples.size() < 2)
+        return;
+    const qint64 span = samples.last().first - samples.first().first;
+    if (span <= 0)
+        return;
+    qreal sum = 0;
+    for (int i = 1; i < samples.size(); i++)
+        sum += samples.at(i).second;
+    const qreal density = densityOf(f);
+    qreal v = sum / span * 1000.0 * FLING_SCALE;
+    qCDebug(lcRotary) << "crown velocity" << v << "px/s over" << samples.size() << "events";
+    if (qAbs(v) <= MIN_ROTARY_FLING_DP * density)
+        return;
+    v = qBound(-MAX_ROTARY_FLING_DP * density, v, MAX_ROTARY_FLING_DP * density);
+    const qreal ppi = density * 160;
+    m_flingDuration = FlingSpline::duration(qAbs(v), ppi);
+    m_flingDistance = (v < 0 ? -1 : 1) * FlingSpline::distance(qAbs(v), ppi);
+    if (m_flingDuration <= 0 || qAbs(m_flingDistance) < 0.5)
+        return;
+    m_flingFrom = m_goal;
+    m_flingElapsed = 0;
+    m_flinging = true;
+    startGlide();
+}
+
 void RotaryInput::animate(qreal dt)
 {
     QQuickItem *f = m_target;
-    if (!f || m_kind == None) {
+    if (!f || m_kind == None || m_kind == Exit) {
         m_frame->stop();
+        m_flinging = false;
         return;
     }
+    if (m_flinging) {
+        /* the crown fling moves the goal along the AOSP spline; the
+         * smoothing spring follows it */
+        m_flingElapsed += dt;
+        const qreal t = qMin<qreal>(1, m_flingElapsed / m_flingDuration);
+        const qreal g = m_flingFrom + m_flingDistance * FlingSpline::position(t);
+        m_goal = qBound(minPos(f, m_horizontal), g, maxPos(f, m_horizontal));
+        if (t >= 1 || g != m_goal)
+            m_flinging = false;
+    }
     const qreal current = f->property(posName(m_horizontal)).toReal();
+    const qreal stiffness = !m_fast && m_kind == Snap ? SNAP_STIFFNESS : SMOOTHING_STIFFNESS;
     qreal x, v;
-    SpringMath::step(SMOOTHING_STIFFNESS, SMOOTHING_DAMPING, current - m_goal, m_glideVelocity,
+    SpringMath::step(stiffness, SMOOTHING_DAMPING, current - m_goal, m_glideVelocity,
                      dt / 1000.0, &x, &v);
     m_glideVelocity = v;
     qreal next = m_goal + x;
     /* within half a pixel and moving less than half a pixel a frame */
-    const bool done = qAbs(x) < 0.5 && qAbs(v) < 30;
+    const bool done = !m_flinging && qAbs(x) < 0.5 && qAbs(v) < 30;
     if (done)
         next = m_goal;
     f->setProperty(posName(m_horizontal), next);
-
-    const qreal tick = tickPx(f);
-    if (qAbs(next - m_lastTickPos) >= tick) {
-        Haptics::instance()->tick();
-        /* keep the tick grid: a long frame does not shift later ticks */
-        m_lastTickPos += (next > m_lastTickPos ? tick : -tick)
-                * qFloor(qAbs(next - m_lastTickPos) / tick);
-    }
     if (done) {
         m_frame->stop();
         if (m_kind == Snap)
@@ -474,10 +822,13 @@ void RotaryInput::stepSnap(int steps)
         const char *method = steps > 0 ? "incrementCurrentIndex" : "decrementCurrentIndex";
         for (int i = 0; i < qAbs(steps); i++)
             QMetaObject::invokeMethod(v, method);
-        if (v->property("currentIndex").toInt() != before)
-            Haptics::instance()->tick();
-        else
-            Haptics::instance()->limit();
+        const int after = v->property("currentIndex").toInt();
+        if (after != before) {
+            m_limitArmed = true;
+            Haptics::instance()->scrollFocus();
+        } else {
+            playLimit(after);
+        }
         return;
     }
 
@@ -495,25 +846,23 @@ void RotaryInput::stepSnap(int steps)
     const int count = v->property("count").toInt();
     const int target = qBound(0, index + steps, count - 1);
     if (target == index) {
-        Haptics::instance()->limit();
+        playLimit(index);
         return;
     }
+    m_limitArmed = true;
     QQuickItem *item = nullptr;
     QMetaObject::invokeMethod(v, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, item), Q_ARG(int, target));
     if (!item) {
         /* not instantiated (far away): jump */
         QMetaObject::invokeMethod(v, "positionViewAtIndex", Q_ARG(int, target), Q_ARG(int, 5 /* SnapPosition */));
-        Haptics::instance()->tick();
+        Haptics::instance()->scrollFocus();
         return;
     }
-    if (!gliding()) {
+    if (!gliding())
         QMetaObject::invokeMethod(v, "cancelFlick");
-        m_lastTickPos = v->property(posName(horizontal)).toReal();
-    }
     m_goal = qBound(minPos(v, horizontal), horizontal ? item->x() : item->y(), maxPos(v, horizontal));
-    /* one tick per item, from stepSnap, not from the travel */
-    Haptics::instance()->tick();
-    m_lastTickPos = m_goal;
+    /* SCROLL_ITEM_FOCUS once per snapped item */
+    Haptics::instance()->scrollFocus();
     if (!gliding()) {
         startGlide();
     }
