@@ -700,7 +700,7 @@ FocusScope {
             pressedKey = kb._keyAt(mouse.x, mouse.y)
             pressedSlot = pressedKey < 0 ? kb._slotAt(mouse.x, mouse.y) : -1
             if (pressedKey >= 0) {
-                Haptics.click()
+                Haptics.keyboardTap()
                 longPress.restart()
             } else if (pressedSlot >= 0) {
                 Haptics.click()

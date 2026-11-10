@@ -51,7 +51,7 @@ Item {
         if (success)
             Haptics.confirm()
         else
-            Haptics.limit()
+            Haptics.reject()
     }
 
     /*! Hide it now (fading out) */
