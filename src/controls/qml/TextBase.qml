@@ -114,18 +114,25 @@ FocusScope {
     }
 
     Rectangle {
-        // background
-        radius: 5.0
+        // background (design-tokens-17). Stock Wear OS has no inline text
+        // box (text goes in through the full screen keyboard), so the field
+        // is a dark surface container like every other control, outlined as
+        // an M3 outlined field: outline 1 dp, primary 2 dp when focused,
+        // CornerExtraSmall.
+        radius: Theme.shape.extraSmall
         anchors.fill: parent
-        color: "#FFFFFF"
-        border { width: 1; color: editor.activeFocus ? "#606060" : "#BDBEBF" }
+        color: Theme.color.surfaceContainer
+        border {
+            width: editor.activeFocus ? Theme.dp(2) : Theme.dp(1)
+            color: editor.activeFocus ? Theme.color.primary : Theme.color.outline
+        }
     }
     Text {
         id: previewText
 
         y: 8
         clip: true
-        color: "#a0a1a2"
+        color: Theme.color.onSurfaceVariant
         visible: previewTextActive
         text: textBase.previewText
         font.pixelSize: Theme.type.bodyMedium.pixelSize

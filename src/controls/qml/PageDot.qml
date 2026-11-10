@@ -33,9 +33,14 @@ import org.asteroid.utils
 
     On a round screen it draws the stock curved page indicator along the
     bottom of the screen (\l ArcPageIndicator; stock paged screens never use
-    a straight row, PageIndicator.kt, E40), whatever its own position: the
-    dots are placed on the window, not in the item. On a square screen it
-    keeps the straight row. Unselected dots are at 30 %.
+    a straight row, PageIndicator.kt, E40), whatever its own position. The
+    arc is drawn over the page the dots belong to (\l arcPage: the nearest
+    ancestor that covers the window, such as an application page, a layer of
+    a LayerStack or a launcher panel), as stock aligns HorizontalPageIndicator
+    to the bottom centre of its screen. It stays a child of the PageDot, so
+    it takes the caller's opacity, visibility, clipping and stacking, and it
+    moves with the page while the page is swiped. On a square screen it keeps
+    the straight row. Unselected dots are at 30 %.
 
     Here is a short example:
 
@@ -68,16 +73,80 @@ Item {
     property bool additionalDot: false
     property string additionalDotText: "+"
 
-    /*! Draw the curved indicator on the window (round screens). */
-    readonly property bool arc: DeviceSpecs.hasRoundScreen && Window.contentItem !== null
+    /*! Draw the curved indicator over the page (round screens). */
+    readonly property bool arc: DeviceSpecs.hasRoundScreen && Window.window !== null
     /*! The curved indicator (for tests). */
     readonly property alias arcIndicator: _arc
+    /*! The item whose bottom arc carries the dots: the nearest ancestor that
+        covers the window (else the window's content item). */
+    readonly property Item arcPage: _page
+
+    property Item _page: null
+    property rect _pageRect: Qt.rect(0, 0, 0, 0)
+    property var _watched: []
+
+    function _findPage() {
+        var w = pageDot.Window.width, h = pageDot.Window.height
+        for (var it = pageDot.parent; it; it = it.parent) {
+            if (w > 0 && h > 0 && it.width >= w - 1 && it.height >= h - 1)
+                return it
+        }
+        return pageDot.Window.contentItem
+    }
+    // the page in this item's coordinates (transforms included)
+    function _place() {
+        if (!_page) { _pageRect = Qt.rect(0, 0, 0, 0); return }
+        var a = pageDot.mapFromItem(_page, 0, 0)
+        var b = pageDot.mapFromItem(_page, _page.width, _page.height)
+        _pageRect = Qt.rect(a.x, a.y, b.x - a.x, b.y - a.y)
+    }
+    function _watch(o, sig, fn) {
+        o[sig].connect(fn)
+        _watched.push([o, sig, fn])
+    }
+    function _unwatch() {
+        for (var i = 0; i < _watched.length; i++) {
+            try { _watched[i][0][_watched[i][1]].disconnect(_watched[i][2]) } catch (e) {}
+        }
+        _watched = []
+    }
+    function _queueRewatch() { Qt.callLater(pageDot._rewatch) }
+    /*  Event driven, no timer: the page is looked up again when an ancestor
+        is reparented or resized, and the arc is placed again when this item
+        or an item between it and the page moves. The page itself moving (a
+        swipe, a LayerStack pop) needs nothing: the arc is its descendant. */
+    function _rewatch() {
+        _unwatch()
+        if (!arc) { _page = null; _place(); return }
+        _page = _findPage()
+        var below = true
+        for (var it = pageDot; it; it = it.parent) {
+            if (it === _page)
+                below = false
+            _watch(it, "parentChanged", _queueRewatch)
+            _watch(it, "widthChanged", _queueRewatch)
+            _watch(it, "heightChanged", _queueRewatch)
+            if (below) {
+                _watch(it, "xChanged", _place)
+                _watch(it, "yChanged", _place)
+                _watch(it, "scaleChanged", _place)
+                _watch(it, "rotationChanged", _place)
+            }
+        }
+        _place()
+    }
+    onArcChanged: _queueRewatch()
+    Component.onCompleted: _rewatch()
+    Component.onDestruction: _unwatch()
 
     ArcPageIndicator {
         id: _arc
-        parent: pageDot.arc ? pageDot.Window.contentItem : pageDot
-        visible: pageDot.arc && pageDot.visible
-        z: 100
+        anchors.fill: undefined
+        x: pageDot._pageRect.x
+        y: pageDot._pageRect.y
+        width: pageDot._pageRect.width
+        height: pageDot._pageRect.height
+        visible: pageDot.arc && pageDot._page !== null
         count: pageDot.dotNumber + (pageDot.additionalDot ? 1 : 0)
         position: pageDot.currentIndex
     }
