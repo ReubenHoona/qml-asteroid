@@ -6,6 +6,7 @@
 #include "rotaryinput.h"
 #include "haptics.h"
 #include "spring.h"
+#include "scrollphysics.h"
 
 #include <QAbstractAnimation>
 #include <QCoreApplication>
@@ -176,13 +177,19 @@ void RotaryInput::notePress(QQuickWindow *window, const QPointF &pos)
     m_frame->stop();
     /* the next crown event looks the target up again, under this touch */
     m_lastEvent.invalidate();
+    Kind kind = None;
+    bool blocked = false;
+    QQuickItem *t = findTarget(window, pos, &kind, &blocked);
     /* show the indicator while a finger scrolls a list, as Wear OS does */
-    if (m_indicatorOn) {
-        Kind kind = None;
-        bool blocked = false;
-        QQuickItem *t = findTarget(window, pos, &kind, &blocked);
-        if (t && !blocked && kind == Free && scrollsVertically(t))
-            showIndicator(t, false);
+    if (m_indicatorOn && t && !blocked && kind == Free && scrollsVertically(t))
+        showIndicator(t, false);
+    /* every vertical list under the finger flings as Wear OS's do (spline
+     * decay, friction 0.015, 2750 dp/s; motion-transitions-19): attached
+     * here, before the finger lifts, once per view */
+    for (QQuickItem *i = t; i; i = i->parentItem()) {
+        if (i->inherits("QQuickFlickable") && kindOf(i) == Free
+                && scrollsVertically(i) && !scrollsHorizontally(i))
+            ScrollPhysics::installStockFling(i);
     }
 }
 

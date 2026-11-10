@@ -142,14 +142,18 @@ MouseArea {
         True when a quick flick along the gesture ended it: the finger moved
         at least \l flingVelocity pixels per second in the direction of the
         gesture when it was lifted.
+
+        Deprecated: kept with its old threshold for callers that decide with
+        `progress >= 0.5 || flung`. Stock's decision is \l committed.
      */
     readonly property bool flung: velocity >= flingVelocity
     /*!
-        Speed above which a gesture counts as \l flung, in pixels per second.
-        Defaults to stock's config_gestureMinSwipeVelocity, 500 dp/s
-        (1000 px/s on the Pixel Watch 2).
+        Speed above which a gesture counts as \l flung, in pixels per second:
+        125 dp/s (250 px/s on the Pixel Watch 2), as before the stock commit
+        rule. \l committed does not use it: it follows stock's
+        config_gestureMinSwipeVelocity (500 dp/s, Motion.backGesture).
      */
-    property real flingVelocity: Math.min(width, height) / 192 * Motion.backGesture.minVelocityDp
+    property real flingVelocity: Math.min(width, height) / 192 * 125
     /*!
         Stock's "will go back" while dragging (CP3A SwipeBackGestureHandler):
         the gesture is past 0.33 of the screen along its direction and the

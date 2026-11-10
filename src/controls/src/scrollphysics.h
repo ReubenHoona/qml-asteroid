@@ -39,6 +39,16 @@ class QQuickItem;
  * Nothing runs while the list rests: the frame driver stops with the fling
  * or the spring. The crown scrolls the list without a stretch (stock gives
  * a limit haptic instead).
+ *
+ * Every other list gets the stock fling too (motion-transitions-19): when a
+ * finger goes down on a vertical, free-scrolling Flickable that has no
+ * ScrollPhysics of its own, RotaryInput (the window event filter) calls
+ * installStockFling(), which attaches a fling-only ScrollPhysics: the
+ * spline and the 2750 dp/s limit, no stretch, the bounds behaviour left as
+ * the application set it. Left alone: views that snap (Qt snaps them),
+ * views that also scroll horizontally, views whose flickDeceleration or
+ * maximumFlickVelocity the application changed, and views that declare
+ * `property bool asteroidStockFling: false`.
  */
 class ScrollPhysics : public QObject, public QQmlParserStatus
 {
@@ -83,6 +93,13 @@ public:
     /* The finger left: the stretch springs back */
     Q_INVOKABLE void release();
     Q_INVOKABLE void stop();
+    /* Attach a fling-only ScrollPhysics to a plain vertical Flickable, once;
+     * returns whether the Flickable has the stock fling (its own or this) */
+    static bool installStockFling(QQuickItem *flickable);
+    /* The ScrollPhysics driving a Flickable, if any */
+    Q_INVOKABLE static ScrollPhysics *physicsOf(QQuickItem *flickable);
+    /* true for the fling-only physics installStockFling() made */
+    bool isGlobal() const { return m_global; }
     /* The spline, for tests: distance (px) and duration (ms) of a fling */
     Q_INVOKABLE qreal flingDistance(qreal velocity) const;
     Q_INVOKABLE qreal flingDuration(qreal velocity) const;
@@ -132,6 +149,7 @@ private:
     bool m_flingEnabled = true;
     bool m_stretchEnabled = true;
     bool m_complete = false;
+    bool m_global = false;
     bool m_writing = false;
     /* fling */
     qreal m_start = 0;
