@@ -50,6 +50,10 @@ if (WITH_ASTEROIDAPP)
     install(PROGRAMS generate-desktop.sh
             DESTINATION ${CMAKE_INSTALL_BINDIR}
             RENAME asteroid-generate-desktop)
+    # long-text pseudo catalogs (en_XA) for screen tests
+    install(PROGRAMS pseudo-locale.py
+            DESTINATION ${CMAKE_INSTALL_BINDIR}
+            RENAME asteroid-pseudo-locale)
 endif() 
 
 feature_summary(WHAT ALL FATAL_ON_MISSING_REQUIRED_PACKAGES)
