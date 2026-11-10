@@ -64,11 +64,30 @@ QtObject {
     }
     /*! The automatic density in px per dp: 2.0 on the Pixel Watch 2. */
     readonly property real autoDensity: _screenPx / 192
+    /*! The default density in dpi (ro.sf.lcd_density): 320 on the Pixel Watch 2. */
+    readonly property int defaultDensityDpi: Math.round(autoDensity * 160)
     /*!
-        The "Display size" steps in px per dp, smallest to default: 284, 301
-        and 320 dpi on the Pixel Watch 2 (DisplaySizeCalculator).
+        The "Display size" steps in dpi, smallest first, as stock computes
+        them (settings DisplaySizeCalculator.getDisplaySizeList(), with
+        config_minDisplayStepSize_dp 12 and config_minDisplayTargetSize_dp
+        192, VALUES.tsv): the default target width w = px * 160 / dpi (192 dp),
+        step = max(12, (w - 192) / 3), two smaller sizes floor(px * 160 /
+        (w + k * step)) for k = 1, 2, the default dpi, and larger sizes while
+        w - k * step >= 192 (none on a 192 dp screen). Pixel Watch 2: 284,
+        301, 320. The display-density key stores one of these integers.
     */
-    readonly property var densitySteps: [1.775, 1.881, 2.0]
+    readonly property var densitySteps: {
+        var px = Math.round(_screenPx), def = defaultDensityDpi
+        var w = Math.floor(px * 160 / def), minW = 192
+        var step = Math.max(12, Math.floor((w - minW) / 3))
+        var l = []
+        for (var k = 1; k <= 2; k++)
+            l.push(Math.floor(px * 160 / (w + step * k)))
+        l.push(def)
+        for (var t = w - step; t >= minW; t -= step)
+            l.push(Math.floor(px * 160 / t))
+        return l.sort(function (a, b) { return a - b })
+    }
     /*!
         The "Font size" steps (arrays.xml text_size_entries): Small, Default,
         Medium, Large, Larger, Largest.
@@ -95,10 +114,15 @@ QtObject {
     property var _fontScaleValue: _fontScaleSetting.value
     property var _boldValue: _boldSetting.value
 
-    /*! Pixels per dp: the display-density key, 0 (default) = automatic. */
+    /*!
+        Pixels per dp. The display-density key (type i) is a density in dpi,
+        like stock's forced display density (284, 301 or 320 on the Pixel
+        Watch 2): density = dpi / 160. 0 (default), or anything outside
+        100..1280 dpi, is automatic.
+    */
     readonly property real density: {
         var d = Number(_densityValue)
-        return (d > 0.5 && d < 8) ? d : autoDensity
+        return (d >= 100 && d <= 1280) ? d / 160 : autoDensity
     }
     /*! The font scale (1.0 by default). */
     readonly property real fontScale: {
