@@ -122,9 +122,35 @@ Application_p {
         defaultValue: false
     }
 
+    /*!
+        The page's scrolling view: the time text scrolls away with it as
+        stock does (\l ScrollAway, E46). Unset, the view a finger or the
+        crown last scrolled is used (the position indicator reports it).
+    */
+    property Item scrollFlickable: null
+    // set by PositionIndicator when it attaches to a view of this application
+    readonly property bool _asteroidAppRoot: true
+    property Item _autoScrollFlickable: null
+
+    ScrollAway {
+        id: _scrollAway
+        flickable: _application.scrollFlickable ? _application.scrollFlickable : _application._autoScrollFlickable
+    }
+
     TimeText {
+        id: _timeText
         visible: showTime
         z: 11
+        opacity: _scrollAway.alpha
+        transform: [
+            Scale {
+                origin.x: _timeText.width / 2
+                origin.y: 0
+                xScale: _scrollAway.scale
+                yScale: _scrollAway.scale
+            },
+            Translate { y: _scrollAway.translateY }
+        ]
     }
 
     /*!
@@ -155,7 +181,7 @@ Application_p {
     Indicator {
         id: leftIndicator
         edge: Qt.LeftEdge
-        visible: true
+        visible: false  // stock app screens draw no edge hints (AppScaffoldKt.java)
         z: 10
         anchors.verticalCenterOffset: DeviceSpecs.flatTireHeight/2
     }
@@ -163,7 +189,7 @@ Application_p {
     Indicator {
         id: topIndicator
         edge: Qt.TopEdge
-        visible: true
+        visible: false  // stock app screens draw no edge hints (AppScaffoldKt.java)
         z: 10
     }
 

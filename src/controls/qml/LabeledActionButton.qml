@@ -25,24 +25,14 @@ import org.asteroid.controls
     \qmltype LabeledActionButton
     \inqmlmodule org.asteroid.controls
 
-    \brief Clickable label plus icon.
-
-    This control shows a label and an icon, horizontally aligned,
-    and acts as as a button, passing the \l clicked signal to the
-    caller.
-
-    Here is a short example:
+    \brief A \l ListRow with an icon on the right: a Wear OS button row whose
+    icon (26 dp, primary) marks what a tap does.
 
     \qml
-    import QtQuick
-    import org.asteroid.controls
-
-    Item {
-        LabeledActionButton {
-            icon: "ios-power-outline"
-            text: "Shut down"
-            onClicked: visible = false
-        }
+    LabeledActionButton {
+        text: qsTr("Check for updates")
+        icon: "ios-refresh"
+        onClicked: updater.check()
     }
     \endqml
 */
@@ -61,15 +51,17 @@ ListRow {
         }
     }
 
+    iconSize: Theme.size.icon
+
     actionComponent: Item {
         property string name: ""
         onNameChanged: icon.name = name
-
         Icon {
             id: icon
             anchors.centerIn: parent
-            width: iconSize
-            height: iconSize
+            width: Theme.size.icon
+            height: width
+            color: enabled ? Theme.color.primary : Qt.rgba(Theme.color.onSurface.r, Theme.color.onSurface.g, Theme.color.onSurface.b, Theme.alpha.disabledContent)
         }
     }
 }
