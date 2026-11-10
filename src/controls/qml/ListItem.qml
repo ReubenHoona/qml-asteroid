@@ -26,11 +26,17 @@ import org.asteroid.utils
 
     \brief A delegate to display a icon and text combo.
 
+    Drawn as the Wear OS navigation row (FilledTonalButton, E19): a
+    surfaceContainer container with CornerLarge corners inside the list's
+    5.2 % side padding, 52 dp (104 px) tall, the icon 26 dp in primary, 6 dp
+    to the label in labelMedium (onSurface), 14 dp padding, a bounded ripple
+    on press. Rows are 4 dp apart: the item is 112 px tall (the row and 2 dp
+    above and below). \l highlight shows the selected colours
+    (primaryContainer / onPrimaryContainer), as a selected radio row.
+
     An example is shown below which display three icons
     with their associated text and allows the user to select
-    one.  Note that both highlighting and processing of the
-    \l ListItem::clicked signal should typically be explicitly
-    set.
+    one.
 
     \qml
     import QtQuick
@@ -57,7 +63,7 @@ import org.asteroid.utils
             delegate: ListItem {
                 title: text
                 iconName: icon
-                highlight: powerItems.currentIndex == index ? 0.2 : 0
+                highlight: powerItems.currentIndex == index
                 onClicked: powerItems.currentIndex = index
             }
         }
@@ -68,28 +74,29 @@ Item {
     id: listItem
 
     /*! alias to recieve string label.text */
-    property alias title: label.text
+    property alias title: row.text
     /*! alias to recieve string icon.name */
-    property alias iconName: icon.name
-    /*! alias to recieve boolean highlight.forceOn */
-    property alias highlight: highlight.forceOn
-    /*! size of the icon/s */
-    property int iconSize: Math.min(height - Dims.h(6), Dims.h(15))
-    /*! size of the label text */
-    property int labelFontSize: Dims.l(9)
+    property alias iconName: row.iconName
+    /*! show the item as selected */
+    property bool highlight: false
+    /*! size of the icon: 26 dp */
+    property int iconSize: Theme.size.icon
+    /*! size of the label text: labelMedium, 15 sp */
+    property int labelFontSize: Theme.type.labelMedium.pixelSize
     /*!
         Shrink and fade the item near the top and bottom of a round screen
         while it scrolls in a list, as Wear OS lists do (see \l EdgeEffect).
     */
     property alias edgeEffect: edge.enabled
+    /*! The row button (for tests). */
+    readonly property alias button: row
 
     /*! forward the clicked() signal to parent */
     signal clicked()
 
-    width: parent.width
-    // Wear OS touch targets are at least 48 dp: 96 px on the 384 px round
-    // screen (25%), where a row was 21% (80 px); the icon keeps its size
-    height: DeviceSpecs.hasRoundScreen ? Dims.h(25) : Dims.h(21)
+    width: parent ? parent.width : Theme.dp(192)
+    // the 52 dp row plus the 4 dp list spacing (ScalingLazyColumnKt.java:167)
+    height: Theme.size.button + Theme.space.xs
 
     EdgeEffect { id: edge; item: listItem }
     transform: Scale {
@@ -99,39 +106,28 @@ Item {
         yScale: edge.scale
     }
 
-    HighlightBar {
-        id: highlight
-        opacity: edge.alpha
-
-        onClicked: parent.clicked()
-    }
-
-    Icon {
-        id: icon
-
-        opacity: edge.alpha
-        width: iconSize
-        height: width
-
-        anchors {
-            verticalCenter: parent.verticalCenter
-            left: parent.left
-            leftMargin: DeviceSpecs.hasRoundScreen ? Dims.w(18) : Dims.w(12)
-        }
-    }
-
-    Label {
-        id: label
-
+    Button {
+        id: row
         opacity: edge.alpha
         anchors {
-            leftMargin: DeviceSpecs.hasRoundScreen ? Dims.w(6) : Dims.w(10)
-            left: icon.right
-            verticalCenter: parent.verticalCenter
+            fill: parent
+            leftMargin: Theme.margin.listSide
+            rightMargin: Theme.margin.listSide
+            topMargin: Theme.space.xs / 2
+            bottomMargin: Theme.space.xs / 2
         }
-        font {
-            pixelSize: labelFontSize
-            styleName: "SemiCondensed Light"
+        variant: "tonal"
+        iconSize: listItem.iconSize
+        containerColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContainer)
+            : listItem.highlight ? Theme.color.primaryContainer : Theme.color.surfaceContainer
+        contentColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
+            : listItem.highlight ? Theme.color.onPrimaryContainer : Theme.color.onSurface
+        maximumLineCount: 2
+        onClicked: listItem.clicked()
+        Binding {
+            target: row.label
+            property: "font.pixelSize"
+            value: listItem.labelFontSize
         }
     }
 }

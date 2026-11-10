@@ -16,71 +16,35 @@
  */
 
 import QtQuick
-import org.asteroid.utils
 import org.asteroid.controls
 
 /*!
  *   \qmltype RowSeparator
  *   \inqmlmodule org.asteroid.controls
  *
- *   \brief A thin horizontal rule for separating rows in a list.
+ *   \brief The space between two rows of a list.
  *
- *   The \l RowSeparator control draws a hairline rule that scales with
- *   screen resolution via \l Dims, rendering as approximately one
- *   physical pixel at 400px and scaling proportionally on larger
- *   displays.
- *
- *   The separator color defaults to a low-opacity white suitable for
- *   use on dark backgrounds. Both \l color and \l height can be
- *   overridden by the caller.
- *
- *   By default RowSeparator behaves as a plain horizontal rule sized to
- *   its parent width, suitable for use as a sibling in a \l Column or
- *   \l Flickable layout:
+ *   Wear OS Material 3 lists draw no dividers: rows are 4 dp apart
+ *   (ScalingLazyColumn spacing, E18, E21). RowSeparator is therefore an
+ *   empty 4 dp (8 px) gap by default; set \l color to draw a rule again.
  *
  *   \qml
- *   import QtQuick
- *   import org.asteroid.controls
- *
  *   Column {
  *       width: parent.width
- *
  *       Label { text: "Section A" }
  *       RowSeparator {}
  *       Label { text: "Section B" }
- *       RowSeparator {}
- *       Label { text: "Section C" }
  *   }
  *   \endqml
  *
- *   When used inside a list delegate where the separator should hug the
- *   bottom edge of the row, set \l pinToBottom to \c true:
- *
- *   \qml
- *   import QtQuick
- *   import org.asteroid.controls
- *
- *   ListView {
- *       model: 5
- *       delegate: Item {
- *           width: ListView.view.width
- *           height: 60
- *
- *           Text {
- *               anchors.centerIn: parent
- *               text: "Row " + index
- *           }
- *
- *           RowSeparator { pinToBottom: true }
- *       }
- *   }
- *   \endqml
+ *   Inside a list delegate where the gap should hug the bottom edge of the
+ *   row, set \l pinToBottom to \c true.
  */
 Rectangle {
-    /*! the color of the separator line, defaults to low-opacity white */
-    color: "#40ffffff"
-    /*! the thickness of the separator, defaults to Dims.l(0.25) */
-    height: Math.max(1, Dims.l(0.25))
+    /*! the color of the separator: transparent (stock lists have no dividers) */
+    color: "transparent"
+    /*! the gap: 4 dp, the stock list spacing */
+    height: Theme.space.xs
     /*! anchor the separator to the bottom edge of the parent, useful
      *       inside list delegates. Defaults to false for use in Column
      *       and Flickable layouts. */

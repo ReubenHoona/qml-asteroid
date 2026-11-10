@@ -72,6 +72,31 @@ set(controls
         WearKeyboard
         Motion
         ScalingList
+        Ripple
+        Button
+        FilledTonalButton
+        OutlinedButton
+        CompactButton
+        TextButton
+        SwitchButton
+        RadioButton
+        CheckboxButton
+        ListHeader
+        ListSubHeader
+        Card
+        AppCard
+        TitleCard
+        EdgeButton
+        ProgressArc
+        CircularProgressIndicator
+        ArcProgressIndicator
+        LinearProgressIndicator
+        ProgressDialog
+        Placeholder
+        Stepper
+        SwipeToReveal
+        ScrollAway
+        LoadingRow
 )
 
 foreach(control ${controls})

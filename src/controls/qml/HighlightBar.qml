@@ -25,60 +25,43 @@ import org.asteroid.controls
     \qmltype HighlightBar
     \inqmlmodule org.asteroid.controls
 
-    \brief A combined Rectangle and MouseArea.
+    \brief A combined Rectangle and MouseArea with the Wear OS press ripple.
 
     The \l HighlightBar can be used as part of a delegate for a \l ListView
-    or other similar collection or by itself as a convenience.  It 
-    combines a \l Rectangle and \l MouseArea and by default is 
-    transparent.  When it is clicked it turns slightly translucent
-    and also emits a \l MouseArea::clicked signal.
+    or other similar collection or by itself as a convenience. It fills its
+    parent, is transparent, draws the stock bounded ripple (\l Ripple: the
+    content colour at 10 % from the touch point, 450 ms grow, 375 ms fade)
+    while pressed and emits \l MouseArea::clicked. \c forceOn shows the
+    \c activeColor fill (a selected item).
 
     Note that because HighlightBar fills
     the parent, creating a smaller HighlightBar requires defining a
     parent with a set width and height.
-
-    The simplest example is this:
-    \qml
-    import QtQuick
-    import org.asteroid.controls
-
-    HighlightBar { }
-    \endqml
-
-    That example fills the screen and shows the background color 
-    (if any) and briefly turns on opacity when the screen is clicked.
-
-    A slightly more complex example is shown below.  It starts with
-    a transparent background and then cycles between a centered green 
-    or blue \l Rectangle with each mouse click.  
 
     \qml
     import QtQuick
     import org.asteroid.controls
 
     Item {
-        Item {
-            width: parent.width * 0.5
-            height: parent.height * 0.5
-            anchors.centerIn: parent
-            HighlightBar {
-                property int colorIndex: 0
-                onClicked: {
-                    colorIndex = 1 - colorIndex
-                    color = ["blue", "green"][colorIndex]
-                }
-            }
-        }
+        width: 200; height: 104
+        HighlightBar { radius: 52; onClicked: console.log("tap") }
     }
     \endqml
 */
 MouseArea {
+    id: bar
+
     /*! alias to receive boolean forceOn to act like a controlled radio button */
     property bool forceOn: false
 
+    /*! The fill while \c forceOn is set */
     property color activeColor: "#33ffffff"
     property color inactiveColor: "#00ffffff"
     property alias color: highlight.color
+    /*! Corner radius of the fill and the ripple */
+    property alias radius: highlight.radius
+    /*! The ripple colour: the content colour (white by default) */
+    property alias rippleColor: _ripple.color
 
     hoverEnabled: true
 
@@ -87,12 +70,20 @@ MouseArea {
     Rectangle {
         id: highlight
         anchors.fill: parent
-        color: parent.containsPress || parent.forceOn ? parent.activeColor : parent.inactiveColor
+        color: bar.forceOn ? bar.activeColor : bar.inactiveColor
         Behavior on color {
             ColorAnimation {
                 duration: 150;
                 easing.type: Easing.OutQuad
             }
         }
+    }
+
+    Ripple {
+        id: _ripple
+        radius: highlight.radius
+        pressed: bar.pressed
+        pressX: bar.mouseX
+        pressY: bar.mouseY
     }
 }

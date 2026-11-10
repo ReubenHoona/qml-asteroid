@@ -19,211 +19,187 @@
  */
 
 import QtQuick
-import QtQuick.Effects
 import org.asteroid.controls
 
 /*!
     \qmltype IntSelector
     \inqmlmodule org.asteroid.controls
 
-    \brief A control to select an integer value from a range using a pill-shaped scrubber track.
+    \brief An integer value control in a list row, drawn as the Wear OS
+    slider (E29, E30, E33).
 
-    IntSelector displays a pill-shaped track that fills proportionally to the current value.
-    The current value label is displayed at the track center. Minus and plus buttons sit at
-    the left and right ends of the track for precise single-step adjustments.
-
-    The user can interact in three ways:
-    \list
-    \li Tap the \c - or \c + button to decrement or increment by \l stepSize.
-    \li Press and hold anywhere on the track to activate scrubbing, then drag horizontally
-        to adjust continuously.
-    \li Swipe horizontally anywhere on the track to scrub — vertical deviation is ignored
-        once a horizontal swipe is detected, allowing the finger to move away from the track
-        while keeping control.
-    \endlist
-
-    Here is a short example that shows two \l IntSelector controls.
-    The top one uses mostly defaults and sets the value to 50%, incrementing
-    or decrementing 10% at each step. The lower one uses a range of -10
-    to +10 mV and starts at a value of -3, incrementing or decrementing
-    by 1 mV each step.
+    The row is the slider container (surfaceContainer, CornerLarge, at least
+    52 dp). Minus and plus buttons are 48 dp wide at each end with 24 dp
+    icons in onSurface (38 % at the limits); between them the bar: the
+    selected part 12 dp tall and fully round in primary, the rest 4 dp tall
+    in black at 30 % over the container (#212226); the selected length
+    animates 150 ms with (0, 0, 0, 1). The value text sits above the bar.
+    Drag along the bar to scrub; tap the buttons to step.
 
     \qml
-    import QtQuick
-    import org.asteroid.controls
-
-    Item {
-        IntSelector {
-            id: first
-            anchors.bottom: parent.verticalCenter
-            height: parent.height * 0.2
-            value: 50
-        }
-        IntSelector {
-            anchors.top: first.bottom
-            height: parent.height * 0.2
-            min: -10
-            max: +10
-            stepSize: 1
-            value: -3
-            unitMarker: "mV"
-        }
+    IntSelector {
+        width: parent.width
+        height: Dims.l(20)
+        min: 0; max: 100; stepSize: 10
+        value: 50
+        onValueChanged: console.log("value:", value)
     }
     \endqml
 */
-
 ListRow {
+    id: selector
+
     /*!
         \qmlproperty int IntSelector::min
         Minimum allowed value. Default is 0.
     */
     property int min: 0
-
     /*!
         \qmlproperty int IntSelector::max
         Maximum allowed value. Default is 100.
     */
     property int max: 100
-
     /*!
         \qmlproperty int IntSelector::stepSize
         Step size per button actuation. Default is 10.
     */
     property int stepSize: 10
-
     /*!
         \qmlproperty string IntSelector::unitMarker
         Unit string appended to the value label. Default is %.
     */
     property string unitMarker: "%"
-
     /*!
         \qmlproperty int IntSelector::value
         Current value of the control. Default is 0.
     */
     property int value: 0
-
     /*!
         \qmlproperty bool IntSelector::valueLabelVisible
         Whether the value label and indicator are shown. Default is true.
     */
     property bool valueLabelVisible: true
 
+    /*! The selected fraction, 0..1. */
+    readonly property real fraction: max > min ? Math.max(0, Math.min(1, (value - min) / (max - min))) : 0
+
     highlightBarEnabled: false
 
-    Rectangle {
-        id: track
-        anchors {
-            left: parent.left
-            leftMargin: Dims.l(1.8)
-            right: parent.right
-            rightMargin: rowMargin + Dims.l(1.8)
-            verticalCenter: parent.verticalCenter
-        }
-        height: iconSize - Dims.l(3.6)
-        radius: height / 2
-        color: Qt.rgba(0, 0, 0, 0)
+    function _step(d) {
+        var v = Math.max(min, Math.min(max, value + d))
+        if (v === value)
+            return
+        value = v
+        if (typeof Haptics.segmentTick === "function")
+            Haptics.segmentTick()
+    }
 
-        layer.enabled: true
-        layer.effect: MultiEffect {
-            maskEnabled: true
-            maskSource: ShaderEffectSource {
-                smooth: true
-                hideSource: true
-                sourceItem: Rectangle {
-                    width: track.width
-                    height: track.height
-                    radius: track.radius
-                }
-            }
-        }
+    Item {
+        id: slider
+        parent: selector.container
+        anchors.fill: parent
 
-        Rectangle {
-            id: indicator
-            property real fraction: max > min ? Math.max(0, Math.min(1, (value - min) / (max - min))) : 0
-            width: track.width * fraction
-            height: parent.height
-            color: dragArea.tracking ? Qt.rgba(0, 0, 0, 0.6) : Qt.rgba(0, 0, 0, 0.4)
-            visible: valueLabelVisible
+        readonly property real buttonWidth: Theme.size.sliderButtonWidth
+        readonly property color iconOn: Theme.color.onSurface
+        readonly property color iconOff: Qt.rgba(Theme.color.onSurface.r, Theme.color.onSurface.g, Theme.color.onSurface.b, Theme.alpha.disabledContent)
 
-            Behavior on width {
-                enabled: !dragArea.tracking
-                NumberAnimation {
-                    duration: 120
-                    easing.type: Easing.OutQuad
-                }
-            }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: Qt.rgba(0, 0, 0, 0)
-            radius: parent.radius
-            border {
-                color: Qt.rgba(1, 1, 1, 1.0)
-                width: Dims.l(0.64)
-            }
-        }
-
-        IconButton {
+        MouseArea {
             id: buttonMinus
-            iconName: "ios-remove"
-            anchors {
-                left: parent.left
-                leftMargin: -Dims.l(1.5)
-                verticalCenter: parent.verticalCenter
+            width: slider.buttonWidth
+            height: parent.height
+            enabled: selector.enabled
+            onClicked: selector._step(-selector.stepSize)
+            Ripple { radius: selector.container.radius; color: slider.iconOn; pressed: buttonMinus.pressed; pressX: buttonMinus.mouseX; pressY: buttonMinus.mouseY }
+            Icon {
+                anchors.centerIn: parent
+                width: Theme.size.iconSmall
+                height: width
+                name: "ios-remove"
+                color: selector.value <= selector.min ? slider.iconOff : slider.iconOn
             }
-            width: iconSize
-            height: iconSize
-            opacity: value <= min ? 0.3 : 1.0
-            onClicked: value = Math.max(min, value - stepSize)
         }
-
-        IconButton {
+        MouseArea {
             id: buttonPlus
-            iconName: "ios-add"
-            anchors {
-                right: parent.right
-                rightMargin: -Dims.l(1.5)
-                verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            width: slider.buttonWidth
+            height: parent.height
+            enabled: selector.enabled
+            onClicked: selector._step(selector.stepSize)
+            Ripple { radius: selector.container.radius; color: slider.iconOn; pressed: buttonPlus.pressed; pressX: buttonPlus.mouseX; pressY: buttonPlus.mouseY }
+            Icon {
+                anchors.centerIn: parent
+                width: Theme.size.iconSmall
+                height: width
+                name: "ios-add"
+                color: selector.value >= selector.max ? slider.iconOff : slider.iconOn
             }
-            width: iconSize
-            height: iconSize
-            opacity: value >= max ? 0.3 : 1.0
-            onClicked: value = Math.min(max, value + stepSize)
         }
 
-        Label {
-            anchors.centerIn: parent
-            text: value + unitMarker
-            font {
-                pixelSize: dragArea.tracking ? labelFontSize * 1.4 : labelFontSize * 1.1
-                family: "Noto Sans SemiCondensed"
-                bold: true
+        Column {
+            id: middle
+            anchors {
+                left: buttonMinus.right
+                right: buttonPlus.left
+                verticalCenter: parent.verticalCenter
             }
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            color: Qt.rgba(1, 1, 1, 1.0)
-            visible: valueLabelVisible
+            spacing: Theme.space.xs
+            Label {
+                id: valueLabel
+                width: parent.width
+                visible: selector.valueLabelVisible
+                text: selector.value + selector.unitMarker
+                role: "labelMedium"
+                color: Theme.color.onSurface
+                horizontalAlignment: Text.AlignHCenter
+                font.weight: dragArea.tracking ? Font.Bold : Font.Medium
+            }
+            Item {
+                id: bar
+                width: parent.width
+                height: Theme.size.sliderSelectedBar
+                readonly property real selectedWidth: selector.fraction > 0 ? Math.max(height, width * selector.fraction) : 0
+                property real shownWidth: selectedWidth
+                Behavior on shownWidth {
+                    enabled: !dragArea.tracking
+                    NumberAnimation { duration: Motion.duration(150); easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.easing.standardDecelerate }
+                }
+                Rectangle {
+                    id: unselected
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: bar.shownWidth
+                    width: Math.max(0, bar.width - x)
+                    height: Theme.size.sliderUnselectedBar
+                    radius: Theme.dp(2)
+                    color: Theme.color.sliderTrackOnSurface
+                }
+                Rectangle {
+                    id: selected
+                    width: bar.shownWidth
+                    height: parent.height
+                    radius: height / 2
+                    visible: width > 0
+                    color: selector.enabled ? Theme.color.primary
+                                            : Qt.rgba(Theme.color.onSurface.r, Theme.color.onSurface.g, Theme.color.onSurface.b, Theme.alpha.disabledContent)
+                }
+            }
         }
 
         MouseArea {
             id: dragArea
-            anchors.fill: parent
+            anchors.fill: middle
+            enabled: selector.enabled
             propagateComposedEvents: true
             preventStealing: false
-
             property int startX: 0
             property int startY: 0
             property bool tracking: false
-            property int threshold: Dims.l(2)
+            property int threshold: Theme.dp(8)
 
             onPressed: {
                 startX = mouseX
                 startY = mouseY
                 tracking = false
             }
-
             onPositionChanged: (mouse) => {
                 if (!tracking) {
                     var dx = Math.abs(mouseX - startX)
@@ -239,27 +215,25 @@ ListRow {
                 }
                 updateValue(mouseX)
             }
-
             onReleased: {
                 preventStealing = false
                 tracking = false
             }
-
             onPressAndHold: {
                 tracking = true
                 preventStealing = true
                 updateValue(mouseX)
             }
-
             onCanceled: {
                 preventStealing = false
                 tracking = false
             }
-
             function updateValue(mx) {
-                var halfPill = track.height / 2
-                var f = Math.max(0, Math.min(1, (mx - halfPill) / Math.max(1, track.width - track.height)))
-                value = Math.max(min, Math.min(max, Math.round((min + f * (max - min)) / stepSize) * stepSize))
+                var f = Math.max(0, Math.min(1, mx / Math.max(1, width)))
+                var v = Math.max(selector.min, Math.min(selector.max,
+                        Math.round((selector.min + f * (selector.max - selector.min)) / selector.stepSize) * selector.stepSize))
+                if (v !== selector.value)
+                    selector._step(v - selector.value)
             }
         }
     }
