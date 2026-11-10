@@ -29,8 +29,10 @@
 
 #include <QtGlobal>
 
+class QCoreApplication;
 class QGuiApplication;
 class QQuickView;
+class QString;
 
 #if defined(ASTEROIDAPP_LIBRARY)
 #  define ASTEROIDAPP_EXPORT Q_DECL_EXPORT
@@ -42,6 +44,13 @@ namespace AsteroidApp {
     // Simple interface: Get boosted application and view
     ASTEROIDAPP_EXPORT QGuiApplication *application(int &argc, char **argv);
     ASTEROIDAPP_EXPORT QQuickView *createView();
+
+    // Installs the English catalog <name>.en.qm (the //% source texts) and
+    // then the catalog of the current locale, so an id the locale has not
+    // translated shows English instead of the raw id. Returns the number of
+    // catalogs installed. application() calls it with the app's own name.
+    ASTEROIDAPP_EXPORT int installTranslators(QCoreApplication *app, const QString &name,
+                                              const QString &directory);
 
     // Very simple interface: Uses "qrc:/main.qml" as QML entry point
     ASTEROIDAPP_EXPORT int main(int &argc, char **argv);

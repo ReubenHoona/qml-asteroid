@@ -68,6 +68,7 @@ set(controls
         TextField
         Theme
         TimeText
+        TimeFormat
         ValueMeter
         WearKeyboard
         Motion
@@ -106,6 +107,7 @@ endforeach()
 set_source_files_properties(qml/Dims.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Motion.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+set_source_files_properties(qml/TimeFormat.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
 qt6_add_qml_module(asteroidcontrolsplugin
     URI org.asteroid.controls

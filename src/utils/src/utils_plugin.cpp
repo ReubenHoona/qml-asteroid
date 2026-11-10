@@ -18,6 +18,7 @@
 #include "utils_plugin.h"
 #include <QtQml>
 #include "bluetoothstatus.h"
+#include "dateformat.h"
 #include "devicespecs.h"
 #include "fileinfo.h"
 #include "wallclock.h"
@@ -34,5 +35,6 @@ void UtilsPlugin::registerTypes(const char *uri)
     qmlRegisterSingletonType<FileInfo>(uri, 1, 0, "FileInfo", &FileInfo::qmlInstance);
     qmlRegisterType<BluetoothStatus>(uri, 1, 0, "BluetoothStatus");
     qmlRegisterType<WallClock>(uri, 1, 0, "WallClock");
+    qmlRegisterSingletonType<DateFormat>(uri, 1, 0, "DateFormat", &DateFormat::qmlInstance);
 }
 
