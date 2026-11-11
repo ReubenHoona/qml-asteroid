@@ -98,6 +98,11 @@ set(controls
         SwipeToReveal
         ScrollAway
         LoadingRow
+        Dialog
+        AlertDialog
+        Toast
+        DialogGlyph
+        CurvedText
 )
 
 foreach(control ${controls})
