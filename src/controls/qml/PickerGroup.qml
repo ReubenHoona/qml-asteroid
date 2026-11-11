@@ -86,10 +86,30 @@ Item {
     /*! Gap between columns without a separator. */
     property real columnSpacing: 0
 
-    /*! Heading geometry (px). */
+    /*! Heading geometry (px): 14 dp from the top, a 24 dp band, 30 % side
+        padding (time and date pickers). */
     readonly property real headingTop: Theme.dp(14)
-    readonly property real headingHeight: Theme.dp(24)
-    readonly property real headingSide: Theme.dp(Math.ceil(Theme.screenWidthDp * 30 / 100))
+    property real headingHeight: Theme.dp(24)
+    property real headingSide: Theme.dp(Math.ceil(Theme.screenWidthDp * 30 / 100))
+    /*! Heading type role and colour: titleMedium in Primary (TimePickerTokens /
+        DatePickerTokens LabelTypography, LabelColor). */
+    property string headingRole: "titleMedium"
+    property color headingColor: Theme.color.primary
+
+    /*! The columns' option style (see \l Picker): role, height, spacing,
+        OpenType features. */
+    property string optionRole: "numeralSmall"
+    property real optionHeight: Theme.dp(36)
+    property real optionSpacing: Theme.dp(4)
+    property var optionFeatures: Theme.tabularNumerals
+    /*! Option colours: the focused column OnBackground; the others
+        SecondaryDim (TimePickerTokens); DatePicker sets PrimaryDim. */
+    property color selectedColor: Theme.color.onBackground
+    property color unselectedColor: Theme.color.secondaryDim
+    /*! The Confirm button colours: PrimaryDim / OnPrimary
+        (TimePickerTokens, DatePickerTokens ConfirmButton*). */
+    property color confirmContainerColor: Theme.color.primaryDim
+    property color confirmContentColor: Theme.color.onPrimary
     /*! Padding above and below the columns: 4 dp. */
     readonly property real sectionPadding: Theme.dp(4)
     /*! Edge button height: 56 dp. */
@@ -155,9 +175,9 @@ Item {
     FontMetrics {
         id: _fm
         font.family: Theme.fontFamily
-        font.pixelSize: Theme.type.numeralSmall.pixelSize
-        font.weight: Theme.type.numeralSmall.weight
-        font.features: Theme.tabularNumerals
+        font.pixelSize: (Theme.type[group.optionRole] || Theme.type.numeralSmall).pixelSize
+        font.weight: (Theme.type[group.optionRole] || Theme.type.numeralSmall).weight
+        font.features: group.optionFeatures
     }
     /*! The widest of the digits 0-9 in the option style (px). */
     readonly property real widestDigit: {
@@ -207,8 +227,8 @@ Item {
     Label {
         id: _headingOld
         x: _heading.x; y: _heading.y; width: _heading.width; height: _heading.height
-        role: "titleMedium"
-        color: Theme.color.primary
+        role: group.headingRole
+        color: group.headingColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         text: group._oldHeading
@@ -221,8 +241,8 @@ Item {
         y: group.headingTop
         width: Math.max(0, group.width - 2 * group.headingSide)
         height: group.headingHeight
-        role: "titleMedium"
-        color: Theme.color.primary
+        role: group.headingRole
+        color: group.headingColor
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         text: group._shownHeading
@@ -284,6 +304,12 @@ Item {
                         textFor: _col.modelData.text || null
                         invalidFor: _col.modelData.invalid || null
                         focused: group.focusIndex === _col.index
+                        role: group.optionRole
+                        optionHeight: group.optionHeight
+                        optionSpacing: group.optionSpacing
+                        fontFeatures: group.optionFeatures
+                        selectedColor: group.selectedColor
+                        unselectedColor: group.unselectedColor
                         Accessible.name: _col.modelData.label
                         Component.onCompleted: {
                             if (_col.modelData.initial)
@@ -310,9 +336,9 @@ Item {
         enabled: group.confirmEnabled
         function _alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
         containerColor: !enabled ? _alpha(Theme.color.onSurface, Theme.alpha.disabledContainer)
-            : group.showsNext ? Theme.color.surfaceContainer : Theme.color.primaryDim
+            : group.showsNext ? Theme.color.surfaceContainer : group.confirmContainerColor
         contentColor: !enabled ? _alpha(Theme.color.onSurface, Theme.alpha.disabledContent)
-            : group.showsNext ? Theme.color.primary : Theme.color.onPrimary
+            : group.showsNext ? Theme.color.primary : group.confirmContentColor
         Accessible.name: group.showsNext ? qsTr("Next") : qsTr("Confirm")
         Icon {
             anchors.centerIn: parent

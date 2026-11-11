@@ -115,6 +115,10 @@ PickerGroup {
 
     autoCenter: true
     nextButton: true
+    // columns without the focus: PrimaryDim, not TimePicker's SecondaryDim
+    // (DatePickerTokens.java UnselectedContentColor = PrimaryDim, used at
+    // DatePickerKt.java:97 inactivePickerContentColor)
+    unselectedColor: Theme.color.primaryDim
     confirmFocusable: false
     confirmEnabled: dayValid
     separatorText: ""
