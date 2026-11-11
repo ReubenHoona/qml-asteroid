@@ -103,6 +103,11 @@ set(controls
         Toast
         DialogGlyph
         CurvedText
+        Picker
+        PickerGroup
+        TimePicker
+        DatePicker
+        NumberPicker
 )
 
 foreach(control ${controls})

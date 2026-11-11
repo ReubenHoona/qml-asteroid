@@ -49,25 +49,46 @@ import org.asteroid.controls
     \endqml
 */
 ListView {
-    property alias showSeparator: separator.visible
+    /*!
+        Kept for older callers; the stock picker has no divider lines, so
+        nothing is drawn (dialogs-pickers-feedback-12).
+    */
+    property bool showSeparator: false
+    /*! The stock picker fade: the top and bottom 33 % (PickerKt.java:531). */
+    property real gradientRatio: 0.33
 
     id: lv
-    preferredHighlightBegin: height / 2 - Dims.h(5)
-    preferredHighlightEnd: height / 2 + Dims.h(5)
+    // the option (36 dp) centred, 4 dp apart: an 80 px pitch
+    preferredHighlightBegin: height / 2 - Theme.dp(18)
+    preferredHighlightEnd: height / 2 + Theme.dp(18)
     highlightRangeMode: ListView.StrictlyEnforceRange
-    spacing: Dims.h(2)
+    highlightMoveDuration: Motion.duration(100)
+    highlightMoveVelocity: -1
+    spacing: Theme.dp(4)
     clip: true
-
     delegate: SpinnerDelegate { }
 
+    // the stock fade into the background over the top and bottom 33 %
+    // (on the view itself, not its content, so it does not scroll)
     Rectangle {
-        id: separator
-        width: 1
-        height: parent.height*0.8
-        color: "#88FFFFFF"
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.right: parent.right
-        visible: false
+        parent: lv
+        z: 1000
+        width: lv.width
+        height: lv.height * lv.gradientRatio
+        gradient: Gradient {
+            GradientStop { position: 0; color: Theme.color.background }
+            GradientStop { position: 1; color: "transparent" }
+        }
     }
-
+    Rectangle {
+        parent: lv
+        z: 1000
+        y: lv.height - height
+        width: lv.width
+        height: lv.height * lv.gradientRatio
+        gradient: Gradient {
+            GradientStop { position: 0; color: "transparent" }
+            GradientStop { position: 1; color: Theme.color.background }
+        }
+    }
 }

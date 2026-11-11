@@ -122,6 +122,9 @@ private:
     void readSettings();
 
     QPointer<QQuickItem> m_target;
+    /* the picker group whose rotaryTarget gave m_target: the crown moves
+     * on with its focus at once, not after a gesture gap */
+    QPointer<QQuickItem> m_redirector;
     Kind m_kind = None;
     bool m_horizontal = false;
 

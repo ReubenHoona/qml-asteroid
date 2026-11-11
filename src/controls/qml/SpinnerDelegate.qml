@@ -86,35 +86,70 @@ import org.asteroid.controls
     \image SpinnerExample.jpg "Spinner example screenshot"
 */
 Label {
+    id: _delegate
     property bool isCircularSpinner: PathView.view !== null
     property bool isCurr: isCircularSpinner ? PathView.isCurrentItem : ListView.isCurrentItem
-
     width: isCircularSpinner ? PathView.view.width : ListView.view.width
-    height: Dims.h(10)
-
+    /*!
+        The stock M3 picker option: the numeralSmall line (30 sp) held to
+        36..48 dp, so 36 dp (72 px) on this screen; with the 4 dp (8 px)
+        spacing a pitch of 80 px (TimePickerKt$$ExternalSyntheticLambda6.java:
+        117-125, 181: small screen, optionHeight = line height coerced to
+        36..48 dp, optionSpacing 4 dp).
+    */
+    height: Theme.dp(36)
     function zeroPadding(x) {
         if (x<10) return "0"+x;
         else      return x;
     }
-
     /*!
         Defaults to a zero-padded two-digit value.
      */
     text: zeroPadding(index)
+    /*! numeralSmall (30 sp, weight 599) with tabular digits, as stock
+        TimePickerTokens.ContentTypography + "tnum" (Lambda6.java:108). */
+    role: "numeralSmall"
+    font.features: Theme.tabularNumerals
     horizontalAlignment: Text.AlignHCenter
     verticalAlignment: Text.AlignVCenter
 
-    // The fade at the top and bottom fifth of the spinner, from where the
-    // item sits (it was a shader over an offscreen copy of the whole
-    // spinner, drawn again on every frame it moved)
+    /*!
+        Stock M3 Picker scaling (PickerKt.java:538-544, a ScalingLazyColumn
+        with DefaultScalingParams): edgeScale 0.45, edgeAlpha 1.0 (no fade
+        of the option itself), transition area 0.45 of the distance from the
+        viewport edge to its centre, scale interpolator
+        CubicBezier(0.25, 0, 0.75, 1). The distance is from the option's
+        edge nearest the viewport edge.
+    */
+    property real edgeScale: 0.45
+    property real transitionArea: 0.45
+
     readonly property Item _view: isCircularSpinner ? PathView.view : ListView.view
-    readonly property real _centre: !_view ? 0.5
-        : isCircularSpinner ? (y + height / 2) / Math.max(1, _view.height)
-        : (y - _view.contentY + height / 2) / Math.max(1, _view.height)
-    readonly property real _fade: Math.max(0, Math.min(1, Math.min(_centre, 1 - _centre) * 5))
-    property real _focusOpacity: isCurr ? 1.0 : 0.6
-    opacity: _focusOpacity * _fade
-    scale: isCurr ? 1.4 : 0.8
-    Behavior on scale   { NumberAnimation { duration: 200 } }
-    Behavior on _focusOpacity { NumberAnimation { duration: 200 } }
+    // the option's top in the viewport (PathView delegates sit in the view)
+    readonly property real _top: !_view ? 0
+        : isCircularSpinner ? y : y - _view.contentY
+    /*! Distance from the option's nearer edge to the nearer viewport edge (px). */
+    readonly property real edgeDistance: !_view ? 0 : Math.min(_top, _view.height - _top - height)
+    /*! 0 at or inside the transition line, 1 at the viewport edge. */
+    readonly property real scaleProgress: {
+        var H = _view ? _view.height : 0
+        if (H <= 0)
+            return 0
+        var line = transitionArea * H / 2
+        return 1 - Math.max(0, Math.min(edgeDistance, line)) / line
+    }
+    // y of CubicBezier(0.25, 0, 0.75, 1) at x = t (bisection on x)
+    function _ease(t) {
+        if (t <= 0) return 0
+        if (t >= 1) return 1
+        var lo = 0, hi = 1, s = t
+        for (var i = 0; i < 24; i++) {
+            s = (lo + hi) / 2
+            var x = 3 * (1 - s) * (1 - s) * s * 0.25 + 3 * (1 - s) * s * s * 0.75 + s * s * s
+            if (x < t) lo = s
+            else hi = s
+        }
+        return 3 * (1 - s) * s * s + s * s * s
+    }
+    scale: 1 - _ease(scaleProgress) * (1 - edgeScale)
 }
