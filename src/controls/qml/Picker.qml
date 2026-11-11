@@ -42,7 +42,8 @@ import org.asteroid.controls
     \li A fling ends on an option; a crown step glides to the next option in
         about 100 ms.
     \li Focused column OnBackground (#ffffff), others SecondaryDim (#d1d4e1)
-        (TimePickerTokens.java).
+        in TimePicker (TimePickerTokens.java), PrimaryDim (#cdd4eb) in
+        DatePicker (DatePickerTokens.java, DatePickerKt.java:97).
     \li No divider lines.
     \endlist
 
@@ -75,10 +76,19 @@ Item {
         now (a day past the month's end): drawn in OnSurface at 38 %. */
     property var invalidFor: null
 
-    /*! Option height: 36 dp (72 px). */
-    readonly property real optionHeight: Theme.dp(36)
-    /*! Space between options: 4 dp (8 px). */
-    readonly property real optionSpacing: Theme.dp(4)
+    /*! Option height: 36 dp (72 px), the time and date pickers' numeralSmall
+        line held to 36..48 dp. A plain Picker (NumberPicker) sizes the
+        option to its text line instead. */
+    property real optionHeight: Theme.dp(36)
+    /*! Space between options: 4 dp (8 px) in the time and date pickers;
+        stock Picker's own default is 0 (PickerKt.java:235-236). */
+    property real optionSpacing: Theme.dp(4)
+    /*! The option type role: numeralSmall (time, date); NumberPicker uses
+        displaySmall. */
+    property string role: "numeralSmall"
+    /*! The option's OpenType features: tabular digits (TimePicker
+        Lambda6.java:108); none for NumberPicker's plain Text. */
+    property var fontFeatures: Theme.tabularNumerals
     /*! Option pitch: 80 px. */
     readonly property real pitch: optionHeight + optionSpacing
     /*! Share of the height that fades at the top and at the bottom. */
@@ -200,6 +210,9 @@ Item {
             readonly property int option: picker.count > 0 ? index % picker.count : 0
             readonly property bool invalid: picker.invalidFor ? picker.invalidFor(option) === true : false
             text: picker.textFor ? picker.textFor(option) : zeroPadding(option)
+            height: picker.optionHeight
+            role: picker.role
+            font.features: picker.fontFeatures
             color: invalid ? picker.invalidColor : picker.contentColor
             // in the delegate, so the view keeps its drags (the view steals
             // the grab past the drag threshold)

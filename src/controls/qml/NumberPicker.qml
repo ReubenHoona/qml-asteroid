@@ -30,9 +30,18 @@ import org.asteroid.controls
     HeightPickerDialogKt.java, WeightPickerDialogKt.java; Clock dhq.java:
     250-254, fpv.java:2676-2678, 3100-3102):
     \list
-    \li The title 14 dp from the top (titleMedium, Primary); the column(s)
-        fill the rest with 4 dp of vertical padding; a 56 dp edge button with
-        a 24 dp check, named "Confirm".
+    \li The title 14 dp from the top, a plain Text in bodySmall (12 sp)
+        with the default content colour (white, OnBackground), centred, on its
+        own line height (NumberPickerDialogKt$$ExternalSyntheticLambda1.java:
+        64, 88); the column(s) fill the rest with 4 dp of vertical padding
+        (:89); a 56 dp edge button in the default button colours, Primary /
+        OnPrimary (:136, EdgeButtonKt.java:146-153, FilledButtonTokens.java:6),
+        with a 24 dp check, named "Confirm".
+    \li The options are a plain Text in displaySmall (24 sp, weight 500, no
+        tabular digits) in the default content colour
+        (NumberPickerDialogKt$$ExternalSyntheticLambda4.java:25), sized to
+        their line (26 sp) with stock Picker's default spacing of 0
+        (PickerKt.java:235-236). The single column is always the crown's.
     \li Height and weight use two columns (\l columns with two entries).
     \li \l duration: columns hour (0-23), minute, second (two digits,
         repeating, ":" between, 2 dp each side) and the heading is the
@@ -78,6 +87,21 @@ PickerGroup {
 
     title: ""
     separatorPadding: Theme.dp(2)
+
+    // the Settings number picker dialog style (not the duration picker,
+    // which is the Clock timer's TimePicker style)
+    headingRole: duration ? "titleMedium" : "bodySmall"
+    headingColor: duration ? Theme.color.primary : Theme.color.onBackground
+    headingHeight: duration ? Theme.dp(24) : Theme.type.bodySmall.lineHeight
+    headingSide: duration ? Theme.dp(Math.ceil(Theme.screenWidthDp * 30 / 100)) : 0
+    optionRole: duration ? "numeralSmall" : "displaySmall"
+    optionHeight: duration ? Theme.dp(36) : Theme.type.displaySmall.lineHeight
+    optionSpacing: duration ? Theme.dp(4) : 0
+    optionFeatures: duration ? Theme.tabularNumerals : ({})
+    unselectedColor: duration ? Theme.color.secondaryDim : Theme.color.onBackground
+    confirmFocusable: duration
+    confirmContainerColor: duration ? Theme.color.primaryDim : Theme.color.primary
+    confirmContentColor: Theme.color.onPrimary
     separatorText: duration ? ":" : ""
     columnSpacing: Theme.dp(8)
 
