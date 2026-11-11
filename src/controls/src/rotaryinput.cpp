@@ -411,6 +411,23 @@ static void collect(QQuickItem *item, const QPointF &scenePos, int depth, Found 
             f->exitDepth = depth;
         }
     }
+    /* A picker group (TimePicker, DatePicker, NumberPicker) names the one
+     * column the crown turns, whatever column the finger was on: its
+     * rotaryTarget property (Item) wins over every view found inside it,
+     * and null (its confirm button focused) leaves the crown nothing to
+     * turn inside it (stock M3 TimePicker/DatePicker: the rotary input
+     * goes to the focused picker only) */
+    bool redirects = false;
+    QQuickItem *redirect = nullptr;
+    QQuickItem *bestBefore = f->best;
+    int bestDepthBefore = f->bestDepth, bestKindBefore = f->bestKind;
+    if (inside) {
+        const QVariant rt = item->property("rotaryTarget");
+        if (rt.isValid()) {
+            redirects = true;
+            redirect = qobject_cast<QQuickItem *>(rt.value<QObject *>());
+        }
+    }
     /* children can lie outside their parent: keep going unless the parent
      * clips them away */
     if (!inside && item->clip())
@@ -418,6 +435,18 @@ static void collect(QQuickItem *item, const QPointF &scenePos, int depth, Found 
     const QList<QQuickItem *> children = QQuickItemPrivate::get(item)->paintOrderChildItems();
     for (QQuickItem *child : children)
         collect(child, scenePos, depth + 1, f, kindOf);
+    if (redirects) {
+        const RotaryInput::Kind k = redirect && effectivelyVisible(redirect) ? kindOf(redirect) : RotaryInput::Kind(0);
+        if (k != 0) {
+            f->best = redirect;
+            f->bestDepth = qMax(f->bestDepth, depth);
+            f->bestKind = k;
+        } else {
+            f->best = bestBefore;
+            f->bestDepth = bestDepthBefore;
+            f->bestKind = bestKindBefore;
+        }
+    }
 }
 
 QQuickItem *RotaryInput::findTarget(QQuickWindow *window, const QPointF &pos, Kind *kind, bool *blocked) const
@@ -476,9 +505,12 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
         }
     }
 
-    /* A new crown gesture: find what to drive */
+    /* A new crown gesture: find what to drive (also when the picker group
+     * that chose the target has moved its focus to another column) */
+    const bool redirected = m_redirector
+            && qobject_cast<QQuickItem *>(m_redirector->property("rotaryTarget").value<QObject *>()) != m_target;
     const bool newGesture = !m_lastEvent.isValid() || m_lastEvent.elapsed() > GESTURE_GAP_MS
-            || !m_target || m_target->window() != window;
+            || !m_target || m_target->window() != window || redirected;
     if (newGesture) {
         QPointF pos(window->width() / 2.0, window->height() / 2.0);
         if (m_pressWindow == window && m_pressTime.isValid() && m_pressTime.elapsed() < PRESS_MEMORY_MS)
@@ -489,6 +521,7 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
         if (blocked || !t) {
             qCDebug(lcRotary) << "pass" << event->angleDelta() << (blocked ? "(WheelHandler)" : "(no view)");
             m_target = nullptr;
+            m_redirector = nullptr;
             m_kind = None;
             return false;
         }
@@ -505,6 +538,14 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
         m_target = t;
         m_kind = kind;
         m_speed = 0;
+        m_redirector = nullptr;
+        for (QQuickItem *i = t->parentItem(); i; i = i->parentItem()) {
+            const QVariant rt = i->property("rotaryTarget");
+            if (rt.isValid() && qobject_cast<QQuickItem *>(rt.value<QObject *>()) == t) {
+                m_redirector = i;
+                break;
+            }
+        }
         m_exitReceiver = exitReceiverFor(t);
         if (kind == Free)
             m_horizontal = !scrollsVertically(t) && scrollsHorizontally(t);

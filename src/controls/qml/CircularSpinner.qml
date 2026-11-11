@@ -63,34 +63,48 @@ import org.asteroid.controls
 */
 PathView {
     /*!
-        Show a visible separator to the right of this spinner.
+        Kept for older callers; the stock picker has no divider lines, so
+        nothing is drawn (dialogs-pickers-feedback-12).
     */
-    property alias showSeparator: separator.visible
+    property bool showSeparator: false
+    /*! The stock pitch between options: 36 dp + 4 dp = 80 px. */
+    readonly property real pitch: Theme.dp(36) + Theme.dp(4)
+    /*! The stock picker fade: the top and bottom 33 % (PickerKt.java:531). */
+    property real gradientRatio: 0.33
 
     id: pv
     preferredHighlightBegin: 0.5
     preferredHighlightEnd: 0.5
     highlightRangeMode: PathView.StrictlyEnforceRange
-    highlightMoveDuration: 0
+    // a crown step glides to the next option in about 100 ms (stock snap)
+    highlightMoveDuration: Motion.duration(100)
     snapMode: PathView.SnapToItem
     dragMargin: width/2
     clip: true
-
     delegate: SpinnerDelegate { }
-
     path: Path {
-        startX: pv.width/2; startY: pv.height/2-pv.model*Dims.h(6)
-        PathLine { x: pv.width/2; y: pv.height/2+pv.model*Dims.h(6) }
+        startX: pv.width/2; startY: pv.height/2 - pv.count * pv.pitch / 2
+        PathLine { x: pv.width/2; y: pv.height/2 + pv.count * pv.pitch / 2 }
     }
 
+    // the stock fade into the background over the top and bottom 33 %
     Rectangle {
-        id: separator
-        width: 1
-        height: parent.height*0.8
-        color: "#88FFFFFF"
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.right: parent.right
-        visible: false
+        z: 1000
+        width: pv.width
+        height: pv.height * pv.gradientRatio
+        gradient: Gradient {
+            GradientStop { position: 0; color: Theme.color.background }
+            GradientStop { position: 1; color: "transparent" }
+        }
     }
-
+    Rectangle {
+        z: 1000
+        y: pv.height - height
+        width: pv.width
+        height: pv.height * pv.gradientRatio
+        gradient: Gradient {
+            GradientStop { position: 0; color: "transparent" }
+            GradientStop { position: 1; color: Theme.color.background }
+        }
+    }
 }
