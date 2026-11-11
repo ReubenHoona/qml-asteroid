@@ -119,7 +119,12 @@ Dialog {
     readonly property real failureCorner: Theme.shape.extraLarge
     readonly property real openOnPhoneSize: 0.648 * _w
     readonly property real openOnPhoneTop: 0.157 * _w
-    readonly property real ringInset: Theme.dp(5)
+    // open on phone (OpenOnPhoneDialogKt$$ExternalSyntheticLambda7): the
+    // container Box is padded 10 dp x f and clipped to a circle, the ring
+    // (IconContainerProgressIndicator on FillWholeMaxSize) is 5 dp x f wide
+    // at radius (minDim - stroke) / 2 (drawCircularProgressIndicator), so
+    // at f = 1 a 10 px black gap separates a 209 px disc from the ring
+    readonly property real discPadding: Theme.dp(10)
     readonly property real ringWidth: Theme.dp(5)
     readonly property real textEdgeMargin: 4
     readonly property real maxSweep: type === "openOnPhone" ? 200 : 120
@@ -135,16 +140,21 @@ Dialog {
     property real _corner: 0      // failure: 0 circle -> 1 rounded square
     property real _shakeX: 0
     property real _ring: 0        // open on phone: progress 0..1
-    property real _end: 0         // open on phone: the last 500 ms, 0..1
+    property real _f: 1           // open on phone: padding and ring width fraction, 1 -> 0 at the end
+    property real _end: 0         // open on phone: ring alpha out and colour swap, 0 -> 1 at the end
 
     function _stopAll() {
         _seq.stop()
         _lengthSpring.stop()
         _shakeSpring.stop()
+        _endSpatial.stop()
+        _endEffects.stop()
     }
     function _start() {
         _stopAll()
-        _stroke1 = 0; _stroke2 = 0; _textAlpha = 0; _corner = 0; _shakeX = 0; _ring = 0; _end = 0
+        _stroke1 = 0; _stroke2 = 0; _textAlpha = 0; _corner = 0; _shakeX = 0; _ring = 0
+        _endSpatial.snapTo(1)
+        _endEffects.snapTo(0)
         _lengthSpring.snapTo(successWidth)
         _shakeSpring.snapTo(0)
         open()
@@ -174,6 +184,26 @@ Dialog {
         stiffness: Motion.standard.fastSpatial.stiffness
         dampingRatio: 0.5
         visibilityThreshold: 0.1
+    }
+
+    // open on phone, the end phase (OpenOnPhoneDialogKt.java:293-309): the
+    // padding / stroke fraction 1 -> 0 on defaultSpatialSpec, the ring alpha
+    // 1 -> 0 and both colours on defaultEffectsSpec (standard scheme: 500, 1.0)
+    WearSpring {
+        id: _endSpatial
+        target: confirmation
+        property: "_f"
+        stiffness: Motion.standard.defaultSpatial.stiffness
+        dampingRatio: Motion.standard.defaultSpatial.dampingRatio
+        visibilityThreshold: 0.001
+    }
+    WearSpring {
+        id: _endEffects
+        target: confirmation
+        property: "_end"
+        stiffness: Motion.standard.defaultEffects.stiffness
+        dampingRatio: Motion.standard.defaultEffects.dampingRatio
+        visibilityThreshold: 0.001
     }
 
     ParallelAnimation {
@@ -232,10 +262,11 @@ Dialog {
                 duration: confirmation.type === "openOnPhone" ? Math.max(0, confirmation.duration - 500) : 0
                 easing.type: Easing.Linear
             }
-            NumberAnimation {
-                target: confirmation; property: "_end"; from: 0; to: 1
-                duration: confirmation.type === "openOnPhone" ? Math.min(500, confirmation.duration) : 0
-                easing.type: Easing.BezierSpline; easing.bezierCurve: confirmation.drawEasing
+            ScriptAction {
+                script: if (confirmation.type === "openOnPhone") {
+                    _endSpatial.animateTo(0)
+                    _endEffects.animateTo(1)
+                }
             }
         }
     }
@@ -253,6 +284,8 @@ Dialog {
     readonly property alias curvedText: _curved
     readonly property alias linearText: _linearText
     readonly property alias ring: _ringShape
+    readonly property alias endSpatialSpring: _endSpatial
+    readonly property alias endEffectsSpring: _endEffects
 
     Item {
         id: _group
@@ -268,14 +301,14 @@ Dialog {
 
         Rectangle {
             id: _container
-            readonly property real size: confirmation.type === "openOnPhone" ? confirmation.openOnPhoneSize
+            readonly property real size: confirmation.type === "openOnPhone" ? confirmation.openOnPhoneSize - 2 * confirmation.discPadding * confirmation._f
                                        : confirmation.linear ? _group._linearSize
                                        : confirmation.successWidth
             // success: the pill's long side grows along the 45 degree axis
             width: confirmation.type === "success" && !confirmation.linear ? _lengthSpring.value : size
             height: size
             x: (_group.width - width) / 2
-            y: confirmation.type === "openOnPhone" ? confirmation.openOnPhoneTop
+            y: confirmation.type === "openOnPhone" ? confirmation.openOnPhoneTop + (confirmation.openOnPhoneSize - height) / 2
                : confirmation.linear ? _group._linearTop
                : (_group.height - height) / 2
             rotation: confirmation.type === "success" && !confirmation.linear ? 45 : 0
@@ -292,19 +325,19 @@ Dialog {
                  : confirmation._mix(Theme.color.primaryContainer, Theme.color.onPrimaryContainer, confirmation._end)
         }
 
-        // open on phone: the progress ring inside the circle
+        // open on phone: the progress ring on the outer edge of the 249 px
+        // box, around the padded disc; none with Reduce animations (Lambda7)
         Shape {
             id: _ringShape
-            visible: confirmation.type === "openOnPhone" && opacity > 0
-            x: _container.x
-            y: _container.y
-            width: _container.width
-            height: _container.height
+            visible: confirmation.type === "openOnPhone" && opacity > 0 && !Motion.reduceMotion
+            x: (_group.width - width) / 2
+            y: confirmation.openOnPhoneTop
+            width: confirmation.openOnPhoneSize
+            height: confirmation.openOnPhoneSize
             opacity: 1 - confirmation._end
             preferredRendererType: Shape.CurveRenderer
-            readonly property real stroke: confirmation.ringWidth * (1 - confirmation._end)
-            readonly property real inset: confirmation.ringInset * (1 - confirmation._end)
-            readonly property real r: width / 2 - inset - stroke / 2
+            readonly property real stroke: Math.max(0, confirmation.ringWidth * confirmation._f)
+            readonly property real r: (width - stroke) / 2
             readonly property real sweep: 360 * confirmation._ring
             // the gap between the two pieces, as stock (stroke / 3 past the caps)
             readonly property real gapDeg: r > 0 ? (stroke + stroke / 3) / r * 180 / Math.PI : 0
