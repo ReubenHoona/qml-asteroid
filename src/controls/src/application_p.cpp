@@ -54,6 +54,47 @@ void Application_p::setBackFromAnywhere(bool enable)
     emit backFromAnywhereChanged();
 }
 
+void Application_p::setKeyboardOpen(bool open)
+{
+    if (m_keyboardOpen == open)
+        return;
+    m_keyboardOpen = open;
+    applyKeyboardToCompositor();
+    emit keyboardOpenChanged();
+}
+
+void Application_p::requestCloseKeyboard()
+{
+    emit closeKeyboardRequested();
+}
+
+/* The gesture object, created once the window is exposed; the compositor's
+ * close_keyboard event comes back as closeKeyboardRequested() */
+GestureSurface *Application_p::surface()
+{
+    auto *win = window();
+    if (!win || !win->isExposed())
+        return nullptr;
+    if (!m_gestureSurface) {
+        m_gestureSurface.reset(GestureSurface::forWindow(win));
+        if (m_gestureSurface)
+            m_gestureSurface->onCloseKeyboard([this] { requestCloseKeyboard(); });
+    }
+    return m_gestureSurface.get();
+}
+
+void Application_p::applyKeyboardToCompositor()
+{
+    // nothing is sent while the keyboard has never been open, nor twice
+    if (m_sentKeyboard == (m_keyboardOpen ? 1 : 0))
+        return;
+    auto *s = surface();
+    if (!s)
+        return;
+    m_sentKeyboard = m_keyboardOpen ? 1 : 0;
+    s->setKeyboardOpen(m_keyboardOpen);
+}
+
 void Application_p::itemChange(ItemChange change, const ItemChangeData &value)
 {
     if (change == ItemSceneChange) {
@@ -91,8 +132,10 @@ bool Application_p::eventFilter(QObject *watched, QEvent *event)
                 pos = me->scenePosition();
                 press = true;
             }
-        } else if (event->type() == QEvent::Expose && m_sentBack < 0) {
-            applyBackToCompositor();
+        } else if (event->type() == QEvent::Expose) {
+            if (m_sentBack < 0)
+                applyBackToCompositor();
+            applyKeyboardToCompositor();
         }
         if (press) {
             m_touchBlocked = BackSwipeArea::blockedUnder(m_watched->contentItem(), pos);
@@ -104,12 +147,7 @@ bool Application_p::eventFilter(QObject *watched, QEvent *event)
 
 void Application_p::applyBackToCompositor()
 {
-    auto *win = window();
-    if (!win || !win->isExposed())
-        return;
-    if (!m_gestureSurface)
-        m_gestureSurface.reset(GestureSurface::forWindow(win));
-    if (!m_gestureSurface)
+    if (!surface())
         return;
     const int want = (m_backFromAnywhere && !m_touchBlocked) ? 1 : 0;
     if (want == m_sentBack)
@@ -147,8 +185,11 @@ void Application_p::applyOverrideToCompositor()
         return;
     }
 
-    if (!m_gestureSurface)
+    if (!m_gestureSurface) {
         m_gestureSurface.reset(GestureSurface::forWindow(win));
+        if (m_gestureSurface)
+            m_gestureSurface->onCloseKeyboard([this] { requestCloseKeyboard(); });
+    }
 
     if (m_gestureSurface)
         m_gestureSurface->set_overrides_system_gestures(m_overridesSystemGestures ? 1 : 0);

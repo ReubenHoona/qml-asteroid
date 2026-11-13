@@ -18,6 +18,8 @@
 #include <QWaylandClientExtensionTemplate>
 #include <qwayland-asteroid-gestures-unstable-v1.h>
 
+#include <functional>
+
 class QWindow;
 
 class GesturesManager
@@ -41,6 +43,19 @@ public:
     /* The compositor may take a swipe right from anywhere as back (protocol
      * version 2; nothing with an older compositor) */
     void setBackFromAnywhere(bool enabled);
+
+    /* The client shows (or no longer shows) a full screen keyboard: a crown
+     * press then asks it to close instead of going Home (protocol version
+     * 3; nothing with an older compositor) */
+    void setKeyboardOpen(bool open);
+    /* Called when the compositor asks the client to close the keyboard */
+    void onCloseKeyboard(std::function<void()> handler) { m_closeKeyboard = std::move(handler); }
+
+protected:
+    void zasteroid_gesture_surface_v1_close_keyboard() override;
+
+private:
+    std::function<void()> m_closeKeyboard;
 };
 
 #endif // GESTURESEXTENSION_H

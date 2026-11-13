@@ -48,6 +48,11 @@ class Application_p : public QQuickItem
      * the application, as Wear OS does, unless the touch starts on content
      * that moves sideways (see BackSwipeArea). Default true. */
     Q_PROPERTY(bool backFromAnywhere READ backFromAnywhere WRITE setBackFromAnywhere NOTIFY backFromAnywhereChanged)
+    /* A full screen keyboard (WearKeyboard, opened by a TextField) is shown
+     * over the application. The compositor is told, so that a crown press
+     * closes the keyboard first and the next one goes Home, as Wear OS
+     * (SHORT_PRESS_POWER_CLOSE_IME_OR_GO_HOME). Set by TextBase. */
+    Q_PROPERTY(bool keyboardOpen READ keyboardOpen WRITE setKeyboardOpen NOTIFY keyboardOpenChanged)
 
 public:
     explicit Application_p();
@@ -56,6 +61,11 @@ public:
     bool overridesSystemGestures();
     bool backFromAnywhere() const { return m_backFromAnywhere; }
     void setBackFromAnywhere(bool enable);
+    bool keyboardOpen() const { return m_keyboardOpen; }
+    void setKeyboardOpen(bool open);
+    /* What the compositor's close_keyboard event calls (a crown press with
+     * the keyboard open): emits closeKeyboardRequested() */
+    Q_INVOKABLE void requestCloseKeyboard();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -64,17 +74,24 @@ protected:
 private:
     void applyOverrideToCompositor();
     void applyBackToCompositor();
+    void applyKeyboardToCompositor();
+    GestureSurface *surface();
 
     bool m_overridesSystemGestures;
     bool m_backFromAnywhere = true;
     bool m_touchBlocked = false;
+    bool m_keyboardOpen = false;
     int m_sentBack = -1;
+    int m_sentKeyboard = 0;
     QPointer<QQuickWindow> m_watched;
     std::unique_ptr<GestureSurface> m_gestureSurface;
 
 signals:
     void overridesSystemGesturesChanged();
     void backFromAnywhereChanged();
+    void keyboardOpenChanged();
+    /* The compositor asks for the keyboard to close (the crown was pressed) */
+    void closeKeyboardRequested();
 };
 
 #endif // APPLICATION_P_H

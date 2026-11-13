@@ -20,7 +20,7 @@
 #include <qpa/qplatformnativeinterface.h>
 
 GesturesManager::GesturesManager()
-    : QWaylandClientExtensionTemplate<GesturesManager>(2)
+    : QWaylandClientExtensionTemplate<GesturesManager>(3)
 {
 }
 
@@ -53,6 +53,21 @@ void GestureSurface::setBackFromAnywhere(bool enabled)
     if (wl_proxy_get_version(reinterpret_cast<wl_proxy *>(object())) < 2)
         return;
     set_back_from_anywhere(enabled ? 1 : 0);
+}
+
+void GestureSurface::setKeyboardOpen(bool open)
+{
+    if (!isInitialized())
+        return;
+    if (wl_proxy_get_version(reinterpret_cast<wl_proxy *>(object())) < 3)
+        return;
+    set_keyboard_open(open ? 1 : 0);
+}
+
+void GestureSurface::zasteroid_gesture_surface_v1_close_keyboard()
+{
+    if (m_closeKeyboard)
+        m_closeKeyboard();
 }
 
 GestureSurface *GestureSurface::forWindow(QWindow *window)

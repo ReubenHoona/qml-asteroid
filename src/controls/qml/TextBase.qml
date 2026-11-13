@@ -80,6 +80,26 @@ FocusScope {
     /* The action key of the full screen keyboard: "done" (a tick) or "send" */
     property string keyboardAction: "done"
     property Item _keyboard: null
+    /*
+     * The application root (Application) the field sits in, if any. While the
+     * full screen keyboard is open its keyboardOpen is true: the compositor
+     * then answers a crown press with a close request instead of going Home
+     * (Wear OS SHORT_PRESS_POWER_CLOSE_IME_OR_GO_HOME: the keyboard first,
+     * the next press Home; buttons-navigation-12).
+     */
+    property Item _app: null
+
+    function _appRoot() {
+        for (var p = textBase.parent; p; p = p.parent) {
+            if (p._asteroidAppRoot === true)
+                return p
+        }
+        return null
+    }
+    function _setKeyboardOpen(open) {
+        if (_app)
+            _app.keyboardOpen = open
+    }
 
     function openKeyboard() {
         if (!editor || editor.readOnly || _keyboard)
@@ -96,20 +116,44 @@ FocusScope {
             "actionKey": textBase.keyboardAction,
             "maximumLength": limit
         })
-        if (_keyboard)
+        if (_keyboard) {
             _keyboard.forceActiveFocus()
+            _app = _appRoot()
+            _setKeyboardOpen(true)
+        }
     }
-    // the keyboard fades out (150 ms), then goes (motion-transitions-34)
+    // the keyboard fades out (150 ms), then goes (motion-transitions-34).
+    // The compositor hears of it at once: a second crown press during the
+    // fade goes Home
     function _hideKeyboard() {
+        _setKeyboardOpen(false)
         if (_keyboard)
             _keyboard.hide()
     }
+    /*
+     * The compositor asks for the keyboard to close (a crown press): what
+     * was typed stays in the field, as it does with the input method of
+     * Wear OS (it writes into the field as it goes), but nothing is sent
+     * (no enterKeyClicked, no accepted).
+     */
+    function _crownClose() {
+        if (!_keyboard)
+            return
+        textBase.editor.text = _keyboard.text
+        _hideKeyboard()
+    }
     function _closeKeyboard() {
+        _setKeyboardOpen(false)
         if (!_keyboard)
             return
         _keyboard.destroy()
         _keyboard = null
         editor.focus = false
+    }
+    Connections {
+        target: textBase._app
+        ignoreUnknownSignals: true
+        function onCloseKeyboardRequested() { textBase._crownClose() }
     }
     Component {
         id: keyboardComponent
@@ -135,7 +179,11 @@ FocusScope {
                 Qt.callLater(textBase.openKeyboard)
         }
     }
-    Component.onDestruction: if (_keyboard) _keyboard.destroy()
+    Component.onDestruction: {
+        _setKeyboardOpen(false)
+        if (_keyboard)
+            _keyboard.destroy()
+    }
 
     Keys.onReleased: (event) => {
         if (event.key === Qt.Key_Return)
