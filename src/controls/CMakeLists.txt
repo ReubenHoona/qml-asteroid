@@ -113,6 +113,8 @@ set(controls
 foreach(control ${controls})
     list(APPEND controls-qml "qml/${control}.qml")
 endforeach()
+# WearKeyboard: its geometry and key sets are a .pragma library script
+list(APPEND controls-qml "qml/keyboard/KeyboardLayout.js")
 
 set_source_files_properties(qml/Dims.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)

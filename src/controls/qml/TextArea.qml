@@ -37,20 +37,16 @@ import org.asteroid.controls
 
     \brief Editable multi-line text field.
 
-    The TextArea provides an editable multiline area which
-    can use a virtual keyboard to accept text. The default 
-    virtual keyboard for AsteroidOS is the \l HandWritingKeyboard
-    which is used in this example.  In this example, a simple 
-    \l TextArea is created in the upper left corner of the screen.
+    The TextArea is a multi-line field. As on stock Wear OS it is a row, not
+    an edit box: the preview text is its label, the text (up to three lines)
+    sits below it, and a tap opens the full screen \l WearKeyboard with the
+    preview text as its hint.
 
     \qml
     import QtQuick
     import org.asteroid.controls
 
     Item {
-        HandWritingKeyboard {
-            anchors.fill: parent
-        }
         TextArea {
             width: parent.width * 0.8
             height: parent.height * 0.8
@@ -74,9 +70,11 @@ TextBase {
     property alias inputMethodHints: textEdit.inputMethodHints
 
     editor: textEdit
+    valueLines: 3
 
     Repeater {
-        model: Math.floor((parent.height - 30) / editor.cursorRectangle.height)
+        // lines only where the application's own InputPanel edits in place
+        model: textArea.fullScreenKeyboard ? 0 : Math.floor((parent.height - 30) / editor.cursorRectangle.height)
         Rectangle {
             x: 8
             y: (index+1)*editor.cursorRectangle.height+6
@@ -98,6 +96,8 @@ TextBase {
 
         y: 6
         focus: true
+        // the row draws the text; the editor only holds it (and the focus)
+        opacity: textArea.fullScreenKeyboard ? 0 : 1
         color: Theme.color.onSurface
         wrapMode: TextEdit.Wrap
         cursorVisible: activeFocus

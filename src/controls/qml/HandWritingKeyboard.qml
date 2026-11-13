@@ -24,10 +24,14 @@ import QtQuick.VirtualKeyboard
 
     \brief A hand writing keyboard for AsteroidOS.
 
+    \b Deprecated: stock Wear OS (Pixel Watch 2, CP3A) always hides the
+    handwriting key, and \l TextField and \l TextArea open the full screen
+    \l WearKeyboard on a tap. Applications should not place this control;
+    it is kept only so that old applications still load.
+
     The HandWritingKeyboard is a virtual keyboard that allows 
     a user to input text without a physical keyboard.
-    The HandWritingKeyboard is the default virtual keyboard for 
-    AsteroidOS.
+    It was the default virtual keyboard for AsteroidOS.
 
     Handwriting needs a handwriting recognition engine in Qt Virtual
     Keyboard. Without one (Qt 6 ships no free engine), the

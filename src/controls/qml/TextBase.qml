@@ -43,7 +43,28 @@ FocusScope {
     property string enterKeyText
     property bool enterKeyEnabled: enterKeyAction === EnterKeyAction.None || editor.text.length > 0 || editor.inputMethodComposing
 
-    implicitHeight: editor.height + 12
+    /*
+     * Stock Wear OS has no edit box: a field is a row (surfaceContainer
+     * pill, 52 dp high at least) with the application's hint (previewText)
+     * as its label and the value, or dots for a password, below it in
+     * onSurfaceVariant (a Button with a secondary label). A tap opens the
+     * full screen keyboard with previewText as its hint (text-input-38).
+     * The editor stays in the tree as the holder of the text and of the
+     * focus, but draws nothing.
+     */
+    implicitHeight: Math.max(Theme.size.button, rowLabels.implicitHeight + 2 * Theme.space.s)
+    /* What the row shows under its label: the text, or one dot per character of a password */
+    readonly property string valueText: {
+        var t = editor.text
+        var mode = editor.echoMode
+        if (mode === TextInput.Password || mode === TextInput.PasswordEchoOnEdit) {
+            var dots = ""
+            for (var i = 0; i < t.length; i++)
+                dots += "•"
+            return dots
+        }
+        return t
+    }
 
     signal enterKeyClicked
 
@@ -66,15 +87,22 @@ FocusScope {
         var root = textBase.Window.contentItem
         if (!root)
             return
+        var limit = editor.maximumLength !== undefined && editor.maximumLength < 32767 ? editor.maximumLength : -1
         _keyboard = keyboardComponent.createObject(root, {
             "text": editor.text,
             "placeholderText": textBase.previewText,
             "echoMode": editor.echoMode !== undefined ? editor.echoMode : TextInput.Normal,
             "inputMethodHints": editor.inputMethodHints,
-            "actionKey": textBase.keyboardAction
+            "actionKey": textBase.keyboardAction,
+            "maximumLength": limit
         })
         if (_keyboard)
             _keyboard.forceActiveFocus()
+    }
+    // the keyboard fades out (150 ms), then goes (motion-transitions-34)
+    function _hideKeyboard() {
+        if (_keyboard)
+            _keyboard.hide()
     }
     function _closeKeyboard() {
         if (!_keyboard)
@@ -90,12 +118,13 @@ FocusScope {
             z: 10000
             onAccepted: (text) => {
                 textBase.editor.text = text
-                textBase._closeKeyboard()
+                textBase._hideKeyboard()
                 textBase.enterKeyClicked()
                 if (typeof textBase.editor.accepted === "function")
                     textBase.editor.accepted()
             }
-            onDismissed: textBase._closeKeyboard()
+            onDismissed: textBase._hideKeyboard()
+            onClosed: textBase._closeKeyboard()
         }
     }
     // an application that gives the editor the focus wants the keyboard
@@ -114,29 +143,54 @@ FocusScope {
     }
 
     Rectangle {
-        // background (design-tokens-17). Stock Wear OS has no inline text
-        // box (text goes in through the full screen keyboard), so the field
-        // is a dark surface container like every other control, outlined as
-        // an M3 outlined field: outline 1 dp, primary 2 dp when focused,
-        // CornerExtraSmall.
-        radius: Theme.shape.extraSmall
+        // the row: surfaceContainer, a pill as tall as the content allows
+        id: rowContainer
+        radius: textBase.fullScreenKeyboard ? Theme.shape.clamp(Theme.shape.large, height) : Theme.shape.extraSmall
         anchors.fill: parent
         color: Theme.color.surfaceContainer
+        // an application that edits in place with its own InputPanel
+        // (fullScreenKeyboard false) keeps the outlined box
         border {
-            width: editor.activeFocus ? Theme.dp(2) : Theme.dp(1)
+            width: textBase.fullScreenKeyboard ? 0 : (editor.activeFocus ? Theme.dp(2) : Theme.dp(1))
             color: editor.activeFocus ? Theme.color.primary : Theme.color.outline
         }
     }
-    Text {
-        id: previewText
-
-        y: 8
-        clip: true
-        color: Theme.color.onSurfaceVariant
-        visible: previewTextActive
-        text: textBase.previewText
-        font.pixelSize: Theme.type.bodyMedium.pixelSize
-        anchors { left: parent.left; right: parent.right; margins: 12 }
-
+    Column {
+        id: rowLabels
+        anchors {
+            left: parent.left; right: parent.right
+            leftMargin: Theme.space.xl; rightMargin: Theme.space.xl
+            verticalCenter: parent.verticalCenter
+        }
+        // the hint is the label (labelMedium), the value sits below it (labelSmall)
+        Text {
+            id: previewText
+            width: parent.width
+            clip: true
+            elide: Text.ElideRight
+            maximumLineCount: 2
+            wrapMode: Text.Wrap
+            color: Theme.color.onSurface
+            visible: textBase.previewText.length > 0 && (textBase.fullScreenKeyboard || textBase.previewTextActive)
+            text: textBase.previewText
+            font.family: Theme.fontFamily
+            font.weight: Theme.type.labelMedium.weight
+            font.pixelSize: Theme.type.labelMedium.pixelSize
+        }
+        Text {
+            id: valueLabel
+            width: parent.width
+            elide: Text.ElideRight
+            maximumLineCount: textBase.valueLines
+            wrapMode: Text.Wrap
+            color: Theme.color.onSurfaceVariant
+            visible: text.length > 0 && textBase.fullScreenKeyboard
+            text: textBase.valueText
+            font.family: Theme.fontFamily
+            font.weight: Theme.type.labelSmall.weight
+            font.pixelSize: Theme.type.labelSmall.pixelSize
+        }
     }
+    /* How many lines of the value the row shows (a text area shows more) */
+    property int valueLines: 1
 }

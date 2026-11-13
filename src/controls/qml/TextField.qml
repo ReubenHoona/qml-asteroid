@@ -37,24 +37,18 @@ import org.asteroid.controls
 
     \brief Editable text field.
 
-    The TextField type provides an editable text field which can
-    use a virtual keyboard to accept text.  The default 
-    virtual keyboard for AsteroidOS is the \l HandWritingKeyboard
-    which is used in this example.  In this example, a simple 
-    TextField is created in the center of the screen with 
-    preview text "sample text".  The preview text is intended to
-    convey what kind of input is being asked but the actual value
-    of the field once filled in is \l text.
+    As on stock Wear OS the field is a row, not an edit box: the
+    preview text is its label, the value (dots for a password) sits below
+    it, and a tap opens the full screen \l WearKeyboard with the preview
+    text as its hint. The preview text is intended to convey what kind of
+    input is being asked; the actual value of the field once filled in is
+    \l text.
 
     \qml
     import QtQuick
     import org.asteroid.controls
 
     Item {
-        HandWritingKeyboard {
-            anchors.fill: parent
-        }
-        
         TextField {
             width: parent.width * 0.8
             textWidth: parent.width *0.75
@@ -95,6 +89,9 @@ TextBase {
 
         x: 12
         clip: true
+        // the row draws the text; the editor only holds it (and the focus)
+        // unless the application's own InputPanel is used
+        opacity: textField.fullScreenKeyboard ? 0 : 1
         width: parent.width-24
         height: parent.height
         flickableDirection: Flickable.HorizontalFlick
