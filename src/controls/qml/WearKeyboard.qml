@@ -10,6 +10,7 @@ import Nemo.KeepAlive
 import Nemo.Configuration
 import org.asteroid.controls
 import "keyboard/KeyboardLayout.js" as L
+import "emoji/EmojiLogic.js" as EL
 
 /*!
     \qmltype WearKeyboard
@@ -66,12 +67,16 @@ import "keyboard/KeyboardLayout.js" as L
     one being written, with a space. Not for passwords, numbers or addresses
     (\l suggestionsEnabled).
 
-    The microphone dictates with the watch's own recogniser
-    (asteroid-assistant's Dictate, D-Bus org.asteroidos.assistant) and shows
-    crossed out when that service is not installed.
+    The microphone opens \l VoiceInput over the keyboard (stock's voice screen;
+    asteroid-assistant's Dictate, D-Bus org.asteroidos.assistant, is its engine):
+    what is dictated goes in at the cursor. It shows crossed out when that
+    service is not installed. The emoji key opens \l EmojiPage (stock's emoji
+    page) in place of the keys; \l startPage opens the keyboard directly on
+    either (a reply row's emoji and voice buttons).
 
     The keyboard draws a frame when something changes; the cursor blinks (500
-    ms) only while the display is on and for 30 s after the last touch.
+    ms) only while the display is on and for 30 s after the last touch. The
+    voice screen and the emoji page draw only while they are shown.
 
     \qml
     WearKeyboard {
@@ -104,8 +109,14 @@ FocusScope {
     property string actionKey: "done"
     /*! Dictation with the watch's recogniser, when it is installed */
     property bool dictationAllowed: echoMode === TextInput.Normal
-    /*! Shown while the microphone listens and nothing is heard yet */
-    property string listeningText: qsTr("Listening…")
+    /*! Open on "emoji" (the emoji page) or "voice" (the voice screen) instead of the letters; "" the letters.
+        With "emoji" the back key leaves the keyboard instead of returning to the letters. */
+    property string startPage: ""
+    /*! The voice screen's engine: "assistant" (asteroid-assistant's Dictate) or "btsyncd" (btsyncd's Voice, which falls back to
+        the phone's recogniser: a voice reply, with \l voiceNotificationId) */
+    property string voiceEngine: "assistant"
+    /*! btsyncd's Start(): the notification being answered by voice */
+    property int voiceNotificationId: 0
     /*! The strip of word suggestions above the keys */
     property bool suggestionsEnabled: echoMode === TextInput.Normal
         && !(inputMethodHints & (Qt.ImhNoPredictiveText | Qt.ImhSensitiveData | Qt.ImhHiddenText
@@ -113,8 +124,8 @@ FocusScope {
                                  | Qt.ImhFormattedNumbersOnly | Qt.ImhDialableCharactersOnly))
     /*! Input stops at this many characters; with no \l placeholderText the hint reads "N characters". -1: no limit */
     property int maximumLength: -1
-    /*! The emoji key in the features row; the emoji page sets it (it emits \l emojiRequested) */
-    property bool emojiEnabled: false
+    /*! The emoji key in the features row (it opens the emoji page and emits \l emojiRequested) */
+    property bool emojiEnabled: true
     /*! The keyboard languages, {code, name}; the space key shows the code of \l language and opens the switcher when there are two or more */
     property var languages: [{ "code": "en", "name": qsTr("English (UK)") }]
     /*! The code of the language in use */
@@ -136,7 +147,7 @@ FocusScope {
     signal dismissed()
     /*! The fade out of \l hide() has ended: destroy the keyboard now */
     signal closed()
-    /*! The emoji key was tapped */
+    /*! The emoji key was tapped (the emoji page opens by itself) */
     signal emojiRequested()
     /*! "Language settings" in the switcher was tapped */
     signal languageSettingsRequested()
@@ -145,7 +156,7 @@ FocusScope {
 
     /*! Leaves without accepting (the cross, the back key, a swipe in the preview) */
     function dismiss() {
-        cancelDictation()
+        _voiceOpen = false
         dismissed()
     }
 
@@ -158,7 +169,7 @@ FocusScope {
         if (_closing)
             return
         _closing = true
-        cancelDictation()
+        _voiceOpen = false
         if (Motion.animationScale === 0) {
             opacity = 0
             closed()
@@ -197,7 +208,6 @@ FocusScope {
         readonly property color popup: "#3c474c"        // long press popup
         readonly property color handle: "#3c4043"       // preview handle
         readonly property color numberDone: "#30a0f2"   // colorNumberActionKey
-        readonly property color partial: "#9aa0a6"
     }
 
     // the pill (20 x 6 dp) of the preview handle and its 60 x 24 dp touch area
@@ -284,6 +294,10 @@ FocusScope {
                 kb._dictationAvailable = found
             })
         _awakeTimer.restart()
+        if (startPage === "emoji")
+            _openEmoji()
+        else if (startPage === "voice")
+            showVoice()
         if (Motion.animationScale > 0)
             _openAnim.start()
     }
@@ -309,7 +323,7 @@ FocusScope {
     function backspace() {
         if (cursor === 0)
             return
-        var from = L.stepIndex(text, cursor, -1)
+        var from = EL.stepBack(text, cursor)
         _lastTyped = false
         _setText(text.substring(0, from) + text.substring(cursor), from)
         _capitalizeNext()
@@ -318,7 +332,7 @@ FocusScope {
     function moveCursor(n) {
         var c = cursor
         for (var i = 0; i < Math.abs(n); i++)
-            c = L.stepIndex(text, c, n > 0 ? 1 : -1)
+            c = n > 0 ? EL.stepForward(text, c) : EL.stepBack(text, c)
         var moved = c !== cursor
         if (moved) {
             cursor = c
@@ -331,7 +345,6 @@ FocusScope {
 
     // the action key: Close while there is nothing to send
     function _activate() {
-        cancelDictation()
         if (text.length === 0)
             dismissed()
         else
@@ -373,17 +386,14 @@ FocusScope {
             break
         case "emoji":
             emojiRequested()
+            _openEmoji()
             break
         case "action":
             _activate()
             break
         case "mic":
-            if (!_dictationAvailable)
-                break
-            if (_dictating)
-                assistant.typedCall("Stop", [])
-            else
-                startDictation()
+            if (_dictationAvailable)
+                showVoice()
             break
         }
     }
@@ -403,7 +413,7 @@ FocusScope {
     /*! The suggestions for the word being written, the likeliest first */
     readonly property var suggestions: _forcedSuggestions !== null ? _forcedSuggestions
         : suggestionsEnabled && predictor.available && _currentWord.length > 0
-          && _partial.length === 0 && !_dictating
+          && !_voiceOpen && !_emojiOpen
           ? predictor.suggest(_currentWord, 5) : []
     /*! Puts the suggestion in place of the word being written, and a space */
     function applySuggestion(s) {
@@ -442,12 +452,10 @@ FocusScope {
         return _lastTyped && text.length > 0 ? dots + text.charAt(text.length - 1) : dots
     }
 
-    // ---- dictation (asteroid-assistant) ----
+    // ---- dictation: the voice screen (VoiceInput) ----
     property bool _dictationAvailable: false
-    property bool _dictating: false
-    property int _session: 0
-    property string _partial: ""
-    property string _note: ""
+    property bool _voiceOpen: false
+    property bool _emojiOpen: false
 
     DBusInterface {
         id: dbusDaemon
@@ -456,78 +464,17 @@ FocusScope {
         path: "/org/freedesktop/DBus"
         iface: "org.freedesktop.DBus"
     }
-    DBusInterface {
-        id: assistant
-        bus: DBus.SessionBus
-        service: "org.asteroidos.assistant"
-        path: "/org/asteroidos/assistant"
-        iface: "org.asteroidos.assistant"
-        signalsEnabled: kb._dictating
 
-        // the signals StateChanged, Partial and Result (Nemo.DBus: the
-        // name, lower case first). Only this keyboard's session: the one
-        // whose "starting" comes while Dictate() has not returned (the
-        // daemon emits it first), else the one Dictate() returns. Starting
-        // a session ends the one going on with that session's "idle": a
-        // Partial or Result of another client's session is not ours.
-        function stateChanged(session: int, state: string) {
-            if (!kb._dictating)
-                return
-            if (kb._session === 0 && state === "starting") {
-                kb._session = session
-            } else if (session === kb._session && state === "idle") {
-                // dropped without a Result (the assistant overlay or a
-                // voice reply took the microphone): nothing more comes
-                kb._dictating = false
-                kb._partial = ""
-            }
-        }
-        function partial(session: int, text: string) {
-            if (kb._dictating && kb._session !== 0 && session === kb._session)
-                kb._partial = text
-        }
-        function result(session: int, json: string) {
-            if (!kb._dictating || kb._session === 0 || session !== kb._session)
-                return
-            var r = {}
-            try { r = JSON.parse(json) } catch (e) { }
-            kb._dictating = false
-            kb._partial = ""
-            if (r.type === "dictation" && r.text) {
-                var t = String(r.text)
-                kb.insert((kb.cursor > 0 && !/\s$/.test(kb.text.substring(0, kb.cursor)) ? " " : "") + t)
-            } else if (r.type === "error") {
-                kb._note = r.text ? String(r.text) : ""
-                noteTimer.restart()
-            }
-        }
-    }
-    Timer { id: noteTimer; interval: 2500; onTriggered: kb._note = "" }
-
-    function startDictation() {
-        _partial = ""
-        _note = ""
-        _session = 0
-        _dictating = true
-        assistant.typedCall("Dictate", [{ "type": "s", "value": "" }], function (session) {
-            if (!kb._dictating)
-                return
-            if (typeof session === "number" && session > 0) {
-                if (kb._session === 0)
-                    kb._session = session
-            } else if (session === 0) {
-                kb._dictating = false
-            }
-        }, function () { kb._dictating = false })
-    }
-    function cancelDictation() {
-        if (!_dictating)
+    /*! Opens the voice screen over the keyboard (the microphone key) */
+    function showVoice() {
+        if (_closing)
             return
-        _dictating = false
-        _partial = ""
-        assistant.typedCall("Cancel", [])
+        _emojiOpen = false
+        _voiceOpen = true
+        _touched()
     }
-    Component.onDestruction: cancelDictation()
+    /*! Back to the keys from the voice screen */
+    function hideVoice() { _voiceOpen = false }
 
     // ---- keep the screen on while typing: 30 s after the last touch or crown turn ----
     function _touched() {
@@ -538,8 +485,8 @@ FocusScope {
         id: _awakeTimer
         interval: kb.keepAwakeInterval
     }
-    /*! The display is held on (typing, or listening) */
-    readonly property bool _awake: (_awakeTimer.running || _dictating) && !_closing
+    /*! The display is held on (typing; the voice screen holds it itself while it is shown) */
+    readonly property bool _awake: _awakeTimer.running && !_closing
     DisplayBlanking { id: blanking; preventBlanking: kb._awake }
 
     // ---- the cursor: blinks 500 ms while the display is on and for 30 s after the last touch ----
@@ -621,6 +568,16 @@ FocusScope {
         _touched()
         var forward = _crownInvertValue === true ? counts : -counts
         var px = forward * crownPxPerCount
+        if (_voiceOpen && voiceLoader.item) {
+            // the voice screen: the crown scrolls its text (csy.java case 4)
+            voiceLoader.item.scrollBy(px)
+            return
+        }
+        if (_emojiOpen && emojiLoader.item) {
+            // the emoji page: expands first, then scrolls (csy.java case 0)
+            emojiLoader.item.crown(px)
+            return
+        }
         if (_f >= 1) {
             // the preview: the crown scrolls the text
             var maxY = Math.max(0, previewFlick.contentHeight - previewFlick.height)
@@ -653,7 +610,7 @@ FocusScope {
     // ---- the preview (fold the keyboard away): 0 open ... 1 collapsed ----
     property real _f: 0
     readonly property bool previewOpen: _f >= 1
-    readonly property bool _canPreview: !numberPad && !_closing
+    readonly property bool _canPreview: !numberPad && !_closing && !_voiceOpen && !_emojiOpen
     function _snapPreview(to) {
         _previewAnim.stop()
         if (Motion.animationScale === 0) {
@@ -737,9 +694,7 @@ FocusScope {
         readonly property real lineY: (kb.numberPad ? kb._pad.top : kb._m.top) - lineH
         readonly property real pad: L.textPadding(kb._m, lineY)
         readonly property real eyeW: kb._password ? Theme.dp(24) : 0
-        readonly property string hint: kb._note.length > 0 ? kb._note
-            : kb._dictating ? kb.listeningText
-            : kb.placeholderText.length > 0 ? kb.placeholderText
+        readonly property string hint: kb.placeholderText.length > 0 ? kb.placeholderText
             : kb.maximumLength > 0 ? qsTr("%1 characters").arg(kb.maximumLength) : ""
         // the word being typed (before the cursor) in colour, when the text is plain
         readonly property bool composing: kb.suggestionsEnabled && kb._currentWord.length > 0
@@ -788,17 +743,9 @@ FocusScope {
                 color: kb._c.label
                 font: pre.font
             }
-            // what the recogniser heard so far
-            Text {
-                height: parent.height
-                verticalAlignment: Text.AlignVCenter
-                text: kb._partial.length > 0 ? (line.shown.length > 0 ? " " : "") + kb._partial : ""
-                color: kb._c.partial
-                font: pre.font
-            }
         }
         Text {
-            visible: kb.text.length === 0 && kb._partial.length === 0
+            visible: kb.text.length === 0
             height: parent.height
             verticalAlignment: Text.AlignVCenter
             text: line.hint
@@ -876,7 +823,7 @@ FocusScope {
         id: keyArea
         anchors.fill: parent
         transform: Translate { y: kb._f * kb._m.areaH }
-        visible: kb._f < 1
+        visible: kb._f < 1 && !kb._emojiOpen
 
         // the chips of the header
         Item {
@@ -955,7 +902,6 @@ FocusScope {
                 readonly property bool down: inputArea.pressedKey === index
                 readonly property string kind: k.kind
                 readonly property bool letterLike: kind === "letter" || kind === "pad-back" || kind === "pad-done"
-                readonly property bool dictatingMic: k.t === "mic" && kb._dictating
                 x: k.x; y: k.y; width: k.w; height: k.h
                 // the space key is drawn at 80 % (softkey alpha 0xcc)
                 opacity: k.t === "space" ? 0.8 : 1
@@ -969,7 +915,7 @@ FocusScope {
                     radius: keyItem.letterLike ? Math.round(Theme.dp(5)) : height / 2
                     visible: keyItem.down || keyItem.kind === "fn" || keyItem.kind === "action"
                     color: keyItem.down ? kb._c.pressed
-                         : keyItem.kind === "action" || keyItem.dictatingMic ? kb._c.paper
+                         : keyItem.kind === "action" ? kb._c.paper
                          : kb._c.fn
                 }
                 // a letter, digit, symbol or page label: Title Medium 16 sp, squeezed in X when too wide
@@ -996,7 +942,7 @@ FocusScope {
                     readonly property string iconName: {
                         switch (keyItem.k.t) {
                         case "back": return "ios-backspace-outline"
-                        case "mic": return kb._dictationAvailable ? (kb._dictating ? "ios-mic" : "ios-mic-outline") : "ios-mic-off-outline"
+                        case "mic": return kb._dictationAvailable ? "ios-mic-outline" : "ios-mic-off-outline"
                         case "emoji": return "ios-happy-outline"
                         case "chevron": return kb._headerMode === "features" ? "ios-arrow-forward" : "ios-arrow-back"
                         case "action": return keyItem.kind === "pad-done" ? "ios-checkmark" : kb._actionIcon
@@ -1009,7 +955,7 @@ FocusScope {
                     height: width
                     name: iconName
                     color: keyItem.kind === "pad-done" ? kb._c.numberDone
-                         : keyItem.kind === "action" || keyItem.dictatingMic ? kb._c.ink
+                         : keyItem.kind === "action" ? kb._c.ink
                          : kb._c.label
                 }
                 // shift: outline arrow (off), filled (on), filled with a bar (locked)
@@ -1395,6 +1341,52 @@ FocusScope {
         }
     }
 
+    // ---- the emoji page (the emoji key): stock's page of the keyboard ----
+    function _openEmoji() {
+        if (_closing)
+            return
+        _voiceOpen = false
+        _emojiOpen = true
+        _touched()
+    }
+    /*! Back from the emoji page to the keys */
+    function hideEmoji() { _emojiOpen = false }
+    Loader {
+        id: emojiLoader
+        anchors.fill: parent
+        active: kb._emojiOpen
+        sourceComponent: EmojiPage {
+            actionIcon: kb._actionIcon
+            areaTop: kb._m.top
+            onPicked: (emoji) => { kb._touched(); kb.insert(emoji) }
+            onDeleteRequested: { kb._touched(); kb.backspace() }
+            onKeyboardRequested: kb.hideEmoji()
+            onActionRequested: kb._activate()
+            onDismissed: kb.dismiss()
+        }
+    }
+    readonly property Item _emojiPage: emojiLoader.item
+
+    // ---- the voice screen (the microphone key) ----
+    Loader {
+        id: voiceLoader
+        anchors.fill: parent
+        active: kb._voiceOpen
+        sourceComponent: VoiceInput {
+            mode: "keyboard"
+            actionKey: kb.actionKey
+            text: kb.text
+            cursor: kb.cursor
+            engine: kb.voiceEngine
+            notificationId: kb.voiceNotificationId
+            displayOn: kb.displayOn
+            onAccepted: (full, insertion) => { kb._voiceOpen = false; kb.insert(insertion); kb._activate() }
+            onKeyboardRequested: (full, insertion) => { kb._voiceOpen = false; kb.insert(insertion) }
+            onDismissed: kb.dismiss()
+        }
+    }
+    readonly property Item _voiceScreen: voiceLoader.item
+
     // ---- the language switcher (long press on space with more than one language) ----
     Rectangle {
         id: switcher
@@ -1498,9 +1490,23 @@ FocusScope {
     }
 
     Keys.onBackPressed: {
-        if (_switcherOpen)
+        if (_switcherOpen) {
             _switcherOpen = false
-        else
+        } else if (_voiceOpen) {
+            // "return to keyboard" keeps what was dictated
+            if (voiceLoader.item)
+                voiceLoader.item.keyboardTapped()
+            else
+                _voiceOpen = false
+        } else if (_emojiOpen) {
+            if (emojiLoader.item && emojiLoader.item.back())
+                return
+            if (startPage === "emoji")
+                kb.dismiss()
+            else
+                _emojiOpen = false
+        } else {
             kb.dismiss()
+        }
     }
 }

@@ -108,6 +108,8 @@ set(controls
         TimePicker
         DatePicker
         NumberPicker
+        VoiceInput
+        EmojiPage
 )
 
 foreach(control ${controls})
@@ -115,6 +117,8 @@ foreach(control ${controls})
 endforeach()
 # WearKeyboard: its geometry and key sets are a .pragma library script
 list(APPEND controls-qml "qml/keyboard/KeyboardLayout.js")
+# EmojiPage: the generated emoji data (emoji/gen-emoji.py) and its logic are .pragma library scripts
+list(APPEND controls-qml "qml/emoji/EmojiData.js" "qml/emoji/EmojiLogic.js")
 
 set_source_files_properties(qml/Dims.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
