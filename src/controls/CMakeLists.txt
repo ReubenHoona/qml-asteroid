@@ -110,6 +110,7 @@ set(controls
         NumberPicker
         VoiceInput
         EmojiPage
+        GlideTrail
 )
 
 foreach(control ${controls})
@@ -119,6 +120,9 @@ endforeach()
 list(APPEND controls-qml "qml/keyboard/KeyboardLayout.js")
 # EmojiPage: the generated emoji data (emoji/gen-emoji.py) and its logic are .pragma library scripts
 list(APPEND controls-qml "qml/emoji/EmojiData.js" "qml/emoji/EmojiLogic.js")
+# WearKeyboard: prediction (next words, autocorrect, double space) and the glide decoder are .pragma library scripts
+list(APPEND controls-qml "qml/keyboard/prediction/NextWordData.js" "qml/keyboard/prediction/PredictionLogic.js"
+                         "qml/keyboard/prediction/GlideDecoder.js")
 
 set_source_files_properties(qml/Dims.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)

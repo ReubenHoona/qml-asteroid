@@ -412,3 +412,78 @@ QStringList WordPredictor::suggest(const QString &typed, int count) const
     }
     return result;
 }
+
+QStringList WordPredictor::glideCandidates(const QString &firsts, const QString &lasts,
+                                           int minLetters, int maxLetters, int limit) const
+{
+    const Words *w = g_words.load();
+    if (!w || limit <= 0)
+        return {};
+    const QByteArray first = firsts.toLower().toLatin1();
+    const QByteArray last = lasts.toLower().toLatin1();
+    if (first.isEmpty() || last.isEmpty())
+        return {};
+    const QHash<QByteArray, int> &common = commonIndex();
+    auto isLower = [w](const Entry &e) {
+        const char *p = w->words.constData() + e.word;
+        for (int i = 0; i < e.wordLen; i++) {
+            if (p[i] >= 'A' && p[i] <= 'Z')
+                return false;
+        }
+        return true;
+    };
+    // the same order as suggest(): the commonest words by their place in COMMON,
+    // the others by SCOWL size (names as if of size 35)
+    auto scoreOf = [&common, w, &isLower](const Entry &e) {
+        auto it = common.constFind(w->key(e));
+        if (it != common.constEnd())
+            return *it;
+        const int rank = isLower(e) ? int(e.rank) : std::min(int(e.rank), 35);
+        return 1000 + (rank - 10) * 60;
+    };
+    struct Candidate { int score; size_t entry; };
+    std::vector<Candidate> out;
+    for (char f : first) {
+        const auto r = prefixRange(w, QByteArray(1, f));
+        for (size_t i = r.first; i < r.second; i++) {
+            const Entry &e = w->entries[i];
+            const QByteArray k = w->key(e);
+            // only a-z and apostrophes; the glide has no key for anything else
+            int letters = 0;
+            bool ok = true;
+            for (char ch : k) {
+                if (ch >= 'a' && ch <= 'z')
+                    letters++;
+                else if (ch != '\'') {
+                    ok = false;
+                    break;
+                }
+            }
+            if (!ok || letters < minLetters || letters > maxLetters)
+                continue;
+            char lastLetter = 0;
+            for (int n = k.size() - 1; n >= 0; n--) {
+                if (k.at(n) != '\'') {
+                    lastLetter = k.at(n);
+                    break;
+                }
+            }
+            if (!last.contains(lastLetter))
+                continue;
+            // one form a key: the lower case one
+            if (!isLower(e) && ((i > r.first && w->key(w->entries[i - 1]) == k && isLower(w->entries[i - 1]))
+                                || (i + 1 < r.second && w->key(w->entries[i + 1]) == k && isLower(w->entries[i + 1]))))
+                continue;
+            out.push_back({ scoreOf(e), i });
+        }
+    }
+    const size_t keep = std::min(out.size(), size_t(limit));
+    std::partial_sort(out.begin(), out.begin() + keep, out.end(), [](const Candidate &a, const Candidate &b) {
+        return a.score != b.score ? a.score < b.score : a.entry < b.entry;
+    });
+    QStringList result;
+    result.reserve(int(keep));
+    for (size_t i = 0; i < keep; i++)
+        result.append(w->word(w->entries[out[i].entry]));
+    return result;
+}

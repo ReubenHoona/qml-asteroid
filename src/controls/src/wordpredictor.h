@@ -40,6 +40,15 @@ public:
     Q_INVOKABLE QStringList suggest(const QString &word, int count = 3) const;
     /* The word is in the list (any case) */
     Q_INVOKABLE bool isWord(const QString &word) const;
+    /*
+     * The words a glide (gesture) can mean, for the decoder in
+     * keyboard/prediction/GlideDecoder.js: the words of minLetters to
+     * maxLetters letters (a-z, apostrophes ignored) that begin with one of
+     * the letters of firsts and end with one of lasts, the likeliest first
+     * (the order of suggest()), at most limit. Names keep their capitals.
+     */
+    Q_INVOKABLE QStringList glideCandidates(const QString &firsts, const QString &lasts,
+                                            int minLetters = 2, int maxLetters = 24, int limit = 3000) const;
 
     /* For tests: read this list instead (before the first WordPredictor) */
     static void setWordsFile(const QString &path);

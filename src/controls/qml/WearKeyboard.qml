@@ -11,6 +11,8 @@ import Nemo.Configuration
 import org.asteroid.controls
 import "keyboard/KeyboardLayout.js" as L
 import "emoji/EmojiLogic.js" as EL
+import "keyboard/prediction/PredictionLogic.js" as P
+import "keyboard/prediction/GlideDecoder.js" as G
 
 /*!
     \qmltype WearKeyboard
@@ -67,6 +69,18 @@ import "emoji/EmojiLogic.js" as EL
     one being written, with a space. Not for passwords, numbers or addresses
     (\l suggestionsEnabled).
 
+    Prediction, all on as in stock (keyboard/prediction/): after a space the strip
+    offers the words that can follow (\l nextWordEnabled; the starts of
+    sentences after a full stop); a space or sentence punctuation corrects the
+    word just typed when it is a confident correction (\l autocorrectEnabled:
+    a swap, a neighbouring key, a missing or extra letter, the apostrophe), and
+    the backspace right after brings the typed word back; two spaces soon after
+    a word make ". " (\l doubleSpacePeriod); punctuation takes the place of a
+    space the keyboard added. A slide over the letters writes a word (Glide
+    typing, \l glideEnabled: a trail in #e6ff7b follows the finger, the word
+    and a space are typed when it lifts and the strip offers the other words
+    the slide could mean).
+
     The microphone opens \l VoiceInput over the keyboard (stock's voice screen;
     asteroid-assistant's Dictate, D-Bus org.asteroidos.assistant, is its engine):
     what is dictated goes in at the cursor. It shows crossed out when that
@@ -92,6 +106,12 @@ import "emoji/EmojiLogic.js" as EL
 */
 FocusScope {
     id: kb
+
+    // The keys keep the keyboard's own left-to-right order in every language
+    // (Gboard's key rows, the header and the crown are not mirrored); the
+    // application's layout direction does not reach in.
+    LayoutMirroring.enabled: false
+    LayoutMirroring.childrenInherit: true
 
     /*! The text written so far */
     property string text: ""
@@ -122,6 +142,17 @@ FocusScope {
         && !(inputMethodHints & (Qt.ImhNoPredictiveText | Qt.ImhSensitiveData | Qt.ImhHiddenText
                                  | Qt.ImhUrlCharactersOnly | Qt.ImhEmailCharactersOnly | Qt.ImhDigitsOnly
                                  | Qt.ImhFormattedNumbersOnly | Qt.ImhDialableCharactersOnly))
+    /*! Next-word candidates after a space (stock: pref_def_value_next_word_prediction, on) */
+    property bool nextWordEnabled: true
+    /*! A mistyped word is corrected when space or punctuation is hit, and the backspace right
+        after it brings the word back (stock: pref_def_value_latin_auto_correction, on) */
+    property bool autocorrectEnabled: true
+    /*! A second space, soon after the first, after a word types ". " (stock:
+        pref_def_value_enable_double_space_period, on) */
+    property bool doubleSpacePeriod: true
+    /*! Glide typing: slide over the letters to write a word (Settings > Input methods >
+        Glide typing, /org/asteroidos/ux/keyboard-glide, stock default on) */
+    property bool glideEnabled: _glideValue !== false && _glideValue !== "false"
     /*! Input stops at this many characters; with no \l placeholderText the hint reads "N characters". -1: no limit */
     property int maximumLength: -1
     /*! The emoji key in the features row (it opens the emoji page and emits \l emojiRequested) */
@@ -323,6 +354,16 @@ FocusScope {
     function backspace() {
         if (cursor === 0)
             return
+        // the backspace right after a correction brings the word typed back
+        var rev = P.revertCorrection(text, cursor, _correction)
+        if (rev) {
+            _noCorrect = _correction.typed
+            _correction = null
+            _lastTyped = false
+            _setText(rev.text, rev.cursor)
+            _capitalizeNext()
+            return
+        }
         var from = EL.stepBack(text, cursor)
         _lastTyped = false
         _setText(text.substring(0, from) + text.substring(cursor), from)
@@ -362,10 +403,10 @@ FocusScope {
             return
         switch (k.t) {
         case "c":
-            insert(_label(k))
+            typeKey(_label(k))
             break
         case "space":
-            insert(" ")
+            typeSpace()
             break
         case "back":
             backspace()
@@ -410,15 +451,53 @@ FocusScope {
     }
     /*! For tests: the suggestions to show instead of the predictor's */
     property var _forcedSuggestions: null
-    /*! The suggestions for the word being written, the likeliest first */
+    // the prediction state (text-input-08): the last correction, a word the user took back,
+    // where a space the keyboard added ends, when and where the last space was typed
+    property var _correction: null          // { typed, corrected, start, trailing }
+    property string _noCorrect: ""
+    property int _autoSpaceEnd: -1
+    property real _spaceTime: 0
+    property int _spaceCursor: -1
+    /*! A clock in ms (tests replace it) */
+    property var clock: function () { return Date.now() }
+    // the field takes prose: no password, address, number or code
+    readonly property bool _proseField: echoMode === TextInput.Normal
+        && !(inputMethodHints & (Qt.ImhUrlCharactersOnly | Qt.ImhEmailCharactersOnly | Qt.ImhDigitsOnly
+                                 | Qt.ImhFormattedNumbersOnly | Qt.ImhDialableCharactersOnly
+                                 | Qt.ImhSensitiveData | Qt.ImhHiddenText))
+    // the chips of the word just glided: the alternatives, while the word is still where it was put
+    property var _glide: null               // { start, end, word, alternatives, lead }
+    readonly property var _glideChips: _glide !== null && cursor === _glide.end
+        && text.substring(_glide.start, _glide.end) === _glide.word + " " ? _glide.alternatives : []
+    /*! The suggestions to show, the likeliest first: while a word is being written its completions (and
+        corrections when it is no word), after a space the words that can follow, after a glide the
+        alternatives to the word glided */
     readonly property var suggestions: _forcedSuggestions !== null ? _forcedSuggestions
-        : suggestionsEnabled && predictor.available && _currentWord.length > 0
-          && !_voiceOpen && !_emojiOpen
-          ? predictor.suggest(_currentWord, 5) : []
-    /*! Puts the suggestion in place of the word being written, and a space */
+        : _glideChips.length > 0 && suggestionsEnabled ? _glideChips
+        : suggestionsEnabled && !_voiceOpen && !_emojiOpen
+          ? (_currentWord.length > 0
+             ? (predictor.available ? predictor.suggest(_currentWord, 5) : [])
+             : nextWordEnabled ? P.nextWords(text.substring(0, cursor), nextWordCount) : [])
+          : []
+    /*! How many next words are offered (stock: accessory_max_candidates_count 3) */
+    property int nextWordCount: 3
+    /*! Puts the suggestion in place of the word being written, and a space (the alternative of a glided
+        word: in place of that word) */
     function applySuggestion(s) {
         if (s.length === 0)
             return
+        if (_glideChips.length > 0) {
+            var g = _glide
+            var repl = s + " "
+            if (maximumLength > 0 && text.length - (g.end - g.start) + repl.length > maximumLength)
+                return
+            _lastTyped = false
+            _setText(text.substring(0, g.start) + repl + text.substring(g.end), g.start + repl.length)
+            _glide = { "start": g.start, "end": g.start + repl.length, "word": s,
+                       "alternatives": g.alternatives, "lead": g.lead }
+            _autoSpaceEnd = cursor
+            return
+        }
         var start = cursor - _currentWord.length
         var add = s + " "
         if (maximumLength > 0 && text.length - _currentWord.length + add.length > maximumLength)
@@ -428,6 +507,140 @@ FocusScope {
         if (shift === 1)
             shift = 0
         _capitalizeNext()
+        // the space is the keyboard's: a punctuation mark takes its place, a second space makes a full stop
+        _autoSpaceEnd = cursor
+        _spaceCursor = cursor
+        _spaceTime = clock()
+        _correction = null
+    }
+
+    // Autocorrects the word just typed (when a space or punctuation follows it): returns the record
+    // that lets the backspace take it back, or null when nothing was corrected
+    function _autocorrect(trailing) {
+        var word = _currentWord
+        if (!autocorrectEnabled || !suggestionsEnabled || !predictor.available || _voiceOpen || _emojiOpen
+                || word.length === 0 || word === _noCorrect)
+            return null
+        var start = cursor - word.length
+        var fixed = P.autocorrect(word, predictor.suggest(word, 3), function (w) { return predictor.isWord(w) },
+                                  P.atSentenceStart(text.substring(0, start)))
+        if (fixed.length === 0 || fixed === word)
+            return null
+        if (maximumLength > 0 && text.length - word.length + fixed.length + trailing.length > maximumLength)
+            return null
+        _lastTyped = false
+        _setText(text.substring(0, start) + fixed + text.substring(cursor), start + fixed.length)
+        return { "typed": word, "corrected": fixed, "start": start, "trailing": trailing }
+    }
+
+    /*! A letter, digit or symbol key was typed: the sentence punctuation takes the place of a space the
+        keyboard added ("hello ," is "hello,") and corrects the word before it */
+    function typeKey(c) {
+        if (c.length === 1 && P.PUNCTUATION.indexOf(c) >= 0 && _proseField) {
+            if (P.swapsSpace(text.substring(0, cursor), _autoSpaceEnd, c))
+                _setText(text.substring(0, cursor - 1) + text.substring(cursor), cursor - 1)
+            else
+                _autocorrect("")
+        }
+        _noCorrect = ""
+        _correction = null
+        _autoSpaceEnd = -1
+        _spaceCursor = -1
+        _glide = null
+        insert(c)
+    }
+
+    /*! The space key: two spaces after a word make ". " (soon after each other), else the word typed is
+        corrected when it is a confident correction, and a space follows */
+    function typeSpace() {
+        var now = clock()
+        var before = text.substring(0, cursor)
+        if (doubleSpacePeriod && _proseField && _spaceCursor === cursor && P.doubleSpace(before, _spaceTime, now)
+                && !(maximumLength > 0 && text.length + 1 > maximumLength)) {
+            _lastTyped = false
+            _setText(before.substring(0, before.length - 1) + ". " + text.substring(cursor), before.length + 1)
+            _spaceTime = 0
+            _spaceCursor = -1
+            _autoSpaceEnd = -1
+            _correction = null
+            _noCorrect = ""
+            if (shift === 1)
+                shift = 0
+            _capitalizeNext()
+            return
+        }
+        var rec = _proseField ? _autocorrect(" ") : null
+        insert(" ")
+        _correction = rec
+        _noCorrect = ""
+        _autoSpaceEnd = -1
+        _spaceCursor = cursor
+        _spaceTime = now
+    }
+
+    // ---- glide typing (text-input-17) ----
+    // the centres of the letter keys, in window px
+    readonly property var _letterCentres: {
+        var c = {}
+        for (var i = 0; i < _bodyKeys.length; i++) {
+            var k = _bodyKeys[i]
+            if (k.t === "c" && /^[a-z]$/.test(k.c))
+                c[k.c] = { "x": k.x + k.w / 2, "y": k.y + k.h / 2 }
+        }
+        return c
+    }
+    /*! A slide over the letters writes a word: on in the setting, on the letter page of a field that takes
+        prose, with the word list read */
+    readonly property bool glideActive: glideEnabled && suggestionsEnabled && predictor.available && page === 0
+        && !numberPad && !_voiceOpen && !_emojiOpen && !_closing && _f === 0
+    // the letter of the key under (x, y), or ""
+    function _letterAt(x, y) {
+        var i = _keyAt(x, y)
+        if (i < 0)
+            return ""
+        var k = _allKeys[i]
+        return k.t === "c" && /^[a-z]$/.test(k.c) ? k.c : ""
+    }
+    /*! The words a glide over the keys can mean, the likeliest first ([{x, y}] in window px) */
+    function glideWords(path) {
+        if (path.length < 2 || !predictor.available)
+            return []
+        var centres = _letterCentres
+        var reach = G.END_RADIUS * keyWidth
+        var firsts = G.nearKeys(path[0], centres, reach)
+        var lasts = G.nearKeys(path[path.length - 1], centres, reach)
+        if (firsts.length === 0 || lasts.length === 0)
+            return []
+        var cands = predictor.glideCandidates(firsts, lasts, 2, 24, 2500)
+        return G.decode(path, centres, keyWidth, cands, 4).map(function (r) { return r.word })
+    }
+    /*! Types the word of a glide, with a space after it (and before it when it follows a word), the
+        alternatives as the chips; false when no word fits */
+    function glideType(path) {
+        var words = glideWords(path)
+        if (words.length === 0)
+            return false
+        var list = words.map(function (w) {
+            return shift === 2 ? w.toUpperCase() : shift === 1 ? w.charAt(0).toUpperCase() + w.substring(1) : w
+        })
+        var before = text.substring(0, cursor)
+        var lead = before.length > 0 && !/\s$/.test(before) && !/[(\["'“‘]$/.test(before) ? " " : ""
+        var add = lead + list[0] + " "
+        if (maximumLength > 0 && text.length + add.length > maximumLength)
+            return false
+        var at = cursor + lead.length
+        _lastTyped = false
+        _setText(before + add + text.substring(cursor), cursor + add.length)
+        if (shift === 1)
+            shift = 0
+        _capitalizeNext()
+        _correction = null
+        _noCorrect = ""
+        _glide = { "start": at, "end": cursor, "word": list[0], "alternatives": list, "lead": lead }
+        _autoSpaceEnd = cursor
+        _spaceCursor = cursor
+        _spaceTime = clock()
+        return true
     }
     // the chip under (x, y) of the window, or -1
     function _slotAt(x, y) {
@@ -539,6 +752,12 @@ FocusScope {
         key: "/org/asteroidos/ux/keyboard-popup"
         defaultValue: true
     }
+    property ConfigurationValue _glideSetting: ConfigurationValue {
+        key: "/org/asteroidos/ux/keyboard-glide"
+        defaultValue: true
+    }
+    // the raw dconf value (tests replace it instead of writing dconf)
+    property var _glideValue: _glideSetting.value
     property ConfigurationValue _crownFastSetting: ConfigurationValue {
         key: "/org/asteroidos/ux/crown-fast"
         defaultValue: true
@@ -675,6 +894,9 @@ FocusScope {
     readonly property Item _cursorBar: cursorBar
     readonly property QtObject _blanking: blanking
     readonly property Item _strip: strip
+    readonly property Item _glideTrail: glideTrail
+    readonly property QtObject _predictor: predictor
+    readonly property Item _inputArea: inputArea
     readonly property Item _previewFlick: previewFlick
     readonly property Item _eye: eye
     readonly property QtObject _openAnimation: _openAnim
@@ -1147,6 +1369,13 @@ FocusScope {
         }
     }
 
+    // the trail of a glide, over the keys (never takes a touch)
+    GlideTrail {
+        id: glideTrail
+        anchors.fill: parent
+        z: 2
+    }
+
     // One area takes every touch: keys (slide to another before lifting),
     // long presses, the drag that folds the keyboard into the preview and the
     // swipes. preventStealing: no back swipe, panel swipe or app dismissal
@@ -1167,6 +1396,12 @@ FocusScope {
         property bool repeating: false
         property bool collapsing: false
         property bool scrolling: false
+        // glide typing: armed by a press on a letter key; a glide once it has crossed two keys
+        property bool glideArmed: false
+        property bool glide: false
+        property var glidePath: []
+        property int glideKeys: 0
+        property string glideLast: ""
         readonly property real slop: Theme.dp(8)
 
         // a right swipe leaves only the preview and the PIN pad
@@ -1198,10 +1433,26 @@ FocusScope {
                 special = "eye"
                 return
             }
+            glideArmed = false
+            glide = false
+            glidePath = []
+            glideKeys = 0
+            glideLast = ""
+            glideTrail.clear()
             pressedKey = kb._keyAt(mouse.x, mouse.y)
             if (pressedKey >= 0) {
                 Haptics.keyboardTap()
                 longPress.restart()
+                if (kb.glideActive) {
+                    var c0 = kb._letterAt(mouse.x, mouse.y)
+                    if (c0 !== "") {
+                        glideArmed = true
+                        glidePath = [{ "x": mouse.x, "y": mouse.y }]
+                        glideKeys = 1
+                        glideLast = c0
+                        glideTrail.begin(mouse.x, mouse.y)
+                    }
+                }
             } else {
                 pressedSlot = kb._slotAt(mouse.x, mouse.y)
                 if (pressedSlot >= 0)
@@ -1258,6 +1509,23 @@ FocusScope {
                 }
                 return
             }
+            // glide typing: the path of a finger that came down on a letter and crosses another
+            if (glideArmed) {
+                glidePath.push({ "x": mouse.x, "y": mouse.y })
+                glideTrail.add(mouse.x, mouse.y)
+                var cl = kb._letterAt(mouse.x, mouse.y)
+                if (cl !== "" && cl !== glideLast) {
+                    glideKeys++
+                    glideLast = cl
+                }
+                if (!glide && G.isGlide(glidePath, kb.keyWidth, glideKeys)) {
+                    glide = true
+                    longPress.stop()
+                    pressedKey = -1
+                }
+                if (glide)
+                    return
+            }
             var k = kb._keyAt(mouse.x, mouse.y)
             if (k !== pressedKey) {
                 pressedKey = k
@@ -1271,7 +1539,13 @@ FocusScope {
             longPress.stop()
             repeat.stop()
             var sp = special
-            if (collapsing) {
+            if (glide) {
+                // the glide ends: the word it spelled (nothing when no word fits)
+                glidePath.push({ "x": mouse.x, "y": mouse.y })
+                glideTrail.finish()
+                if (kb.glideType(glidePath))
+                    Haptics.click()
+            } else if (collapsing) {
                 // on to the nearer end
                 kb._snapPreview(kb._f > 0.5 ? 1 : 0)
             } else if (sp !== "") {
@@ -1300,10 +1574,19 @@ FocusScope {
             repeating = false
             collapsing = false
             scrolling = false
+            if (!glide && glideArmed)
+                glideTrail.clear()
+            glideArmed = false
+            glide = false
+            glidePath = []
         }
         onCanceled: {
             longPress.stop()
             repeat.stop()
+            glideArmed = false
+            glide = false
+            glidePath = []
+            glideTrail.clear()
             pressedSlot = -1
             special = ""
             alternatives.items = []
