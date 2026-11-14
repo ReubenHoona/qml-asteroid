@@ -20,6 +20,7 @@ import QtQuick
 import QtQuick.Window
 import Nemo.Configuration
 import org.asteroid.utils
+import org.asteroid.controls
 
 /*!
     \qmltype Theme
@@ -40,8 +41,9 @@ import org.asteroid.utils
         {pixelSize, lineHeight, weight, width, roundness, opsz,
          letterSpacing, letterSpacingBottom, axes}; Label binds them through
          its \c role property.
-    \li \c{Theme.color.<role>}: plain \c color properties, so a colour theme
-        can replace them live. The values are stock's "No theme".
+    \li \c{Theme.color.<role>}: plain \c color properties. The values are
+        stock's "No theme" until the Color theme (Settings > Display >
+        Color theme: \c colorSource, \c colorPresets) replaces them live.
     \li \c{Theme.alpha.*}, \c{Theme.shape.*}, \c{Theme.space.*},
         \c{Theme.size.*}, \c{Theme.margin.*}.
     \endlist
@@ -368,20 +370,237 @@ QtObject {
 
         // A declared property on<X> next to a property <x> does not take an
         // initial value in Qt 6.11 (read as a handler for <x>), so the
-        // on* roles are set here.
-        Component.onCompleted: {
-            onPrimary = theme.staticPalette.onPrimary
-            onPrimaryContainer = theme.staticPalette.onPrimaryContainer
-            onSecondary = theme.staticPalette.onSecondary
-            onSecondaryContainer = theme.staticPalette.onSecondaryContainer
-            onTertiary = theme.staticPalette.onTertiary
-            onTertiaryContainer = theme.staticPalette.onTertiaryContainer
-            onSurface = theme.staticPalette.onSurface
-            onSurfaceVariant = theme.staticPalette.onSurfaceVariant
-            onBackground = theme.staticPalette.onBackground
-            onError = theme.staticPalette.onError
-            onErrorContainer = theme.staticPalette.onErrorContainer
+        // on* roles are set by Theme once it is complete (applyColorTheme).
+    }
+
+    /* ---- Color theme (Settings > Display > Color theme, design-tokens-08) ---- */
+
+    /*
+        Stock ClockworkSystemUI turns a seed colour into five tonal palettes
+        (Wear V2 schemes) and overlays android:color/system_* with them; "No
+        theme" means no overlay, i.e. the static palette above. Here
+        PaletteGenerator (HCT maths, palette_core.h) does the same and
+        applyColorTheme() writes the 29 roles to Theme.color, only when the
+        setting or the face colours change (never on a tick, never in
+        ambient). The static palette is Moonstone's NEUTRAL scheme exactly.
+
+        dconf keys (all strings):
+          /org/asteroidos/theme/color-source   "static" (No theme, default
+              until the faces report colours), "preset" or "watchface"
+              (Match watch face)
+          /org/asteroidos/theme/seed           the preset's "#RRGGBB" seed
+          /org/asteroidos/theme/accent         optional "#RRGGBB" accent
+          /org/asteroidos/theme/style          optional "neutral",
+              "tonal-spot", "vibrant", "expressive" or "content"; empty =
+              the preset's own style, "content" for a colour that is no preset
+          /org/asteroidos/theme/face-seed      the watch face's primary colour,
+          /org/asteroidos/theme/face-accent    its accent colour (written by
+              the launcher through reportFaceColors() when the face changes)
+    */
+    property ConfigurationValue _colorSourceSetting: ConfigurationValue {
+        key: "/org/asteroidos/theme/color-source"
+        defaultValue: "static"
+    }
+    property ConfigurationValue _colorSeedSetting: ConfigurationValue {
+        key: "/org/asteroidos/theme/seed"
+        defaultValue: ""
+    }
+    property ConfigurationValue _colorAccentSetting: ConfigurationValue {
+        key: "/org/asteroidos/theme/accent"
+        defaultValue: ""
+    }
+    property ConfigurationValue _colorStyleSetting: ConfigurationValue {
+        key: "/org/asteroidos/theme/style"
+        defaultValue: ""
+    }
+    property ConfigurationValue _faceSeedSetting: ConfigurationValue {
+        key: "/org/asteroidos/theme/face-seed"
+        defaultValue: ""
+    }
+    property ConfigurationValue _faceAccentSetting: ConfigurationValue {
+        key: "/org/asteroidos/theme/face-accent"
+        defaultValue: ""
+    }
+
+    // the raw key values (tests replace these instead of writing dconf)
+    property var _colorSourceValue: _colorSourceSetting.value
+    property var _colorSeedValue: _colorSeedSetting.value
+    property var _colorAccentValue: _colorAccentSetting.value
+    property var _colorStyleValue: _colorStyleSetting.value
+    property var _faceSeedValue: _faceSeedSetting.value
+    property var _faceAccentValue: _faceAccentSetting.value
+
+    /*!
+        The seed Match watch face uses until the face reports its colours
+        (Moonstone, ColorThemeSettingsImpl jrx.java:35-46, hqt a()).
+    */
+    readonly property string colorDefaultSeed: "#9A9EAD"
+
+    /*!
+        The preset rows of the Color theme page in stock order (muy.java:40,
+        seeds mmr.java:19-35, styles mmr.java:36), each {id, name, seed,
+        style}. The page adds "Match watch face" first and "No theme" last.
+    */
+    readonly property var colorPresets: [
+        { id: "moonstone", name: qsTr("Moonstone"), seed: "#9A9EAD", style: "neutral" },
+        { id: "ivy", name: qsTr("Ivy"), seed: "#404945", style: "neutral" },
+        { id: "porcelain", name: qsTr("Porcelain"), seed: "#CFC6B4", style: "neutral" },
+        { id: "iris", name: qsTr("Iris"), seed: "#BAC3FF", style: "expressive" },
+        { id: "lemongrass", name: qsTr("Lemongrass"), seed: "#DDEB78", style: "expressive" },
+        { id: "jade", name: qsTr("Jade"), seed: "#B6CF90", style: "tonal-spot" },
+        { id: "indigo", name: qsTr("Indigo"), seed: "#6F9BFF", style: "vibrant" },
+        { id: "peony", name: qsTr("Peony"), seed: "#FF6F7F", style: "vibrant" }
+    ]
+
+    // the stock theme_style numbers (WearColorScheme.java:94-130)
+    readonly property var _colorStyleIds: ({
+        "neutral": 0, "tonal-spot": 1, "tonal_spot": 1, "vibrant": 2, "expressive": 3, "content": 6
+    })
+
+    function _normalColor(c) {
+        var s = String(c === undefined || c === null ? "" : c).trim()
+        return /^#?[0-9a-fA-F]{6}$/.test(s) ? ("#" + s.replace("#", "")).toUpperCase() : ""
+    }
+
+    function _resolveColorTheme(source, seedValue, accentValue, styleValue, faceSeed, faceAccent) {
+        var src = String(source).toLowerCase()
+        if (src !== "preset" && src !== "watchface")
+            return { themed: false, source: "static", seed: "", accent: "", style: "", styleId: -1 }
+        var seed, accent = ""
+        if (src === "preset") {
+            seed = _normalColor(seedValue)
+            accent = _normalColor(accentValue)
+        } else {
+            seed = _normalColor(faceSeed)
+            accent = _normalColor(faceAccent)
         }
+        if (seed === "")
+            seed = colorDefaultSeed
+        var style = String(styleValue === undefined || styleValue === null ? "" : styleValue).toLowerCase()
+        if (_colorStyleIds[style] === undefined) {
+            style = "content"                 // a colour that is no preset
+            for (var i = 0; i < colorPresets.length; i++)
+                if (colorPresets[i].seed === seed) {
+                    style = colorPresets[i].style
+                    break
+                }
+        }
+        return { themed: true, source: src, seed: seed, accent: accent, style: style, styleId: _colorStyleIds[style] }
+    }
+
+    /*! "static" (No theme), "preset" or "watchface" (Match watch face). */
+    readonly property string colorSource: _colorTheme.source
+    /*! The theme is applied (anything but No theme). */
+    readonly property bool colorThemed: _colorTheme.themed
+    /*! The seed in use, "#RRGGBB" ("" for No theme). */
+    readonly property string colorSeed: _colorTheme.seed
+    /*! The accent in use ("" = none). */
+    readonly property string colorAccent: _colorTheme.accent
+    /*! The scheme in use: neutral, tonal-spot, vibrant, expressive or content ("" for No theme). */
+    readonly property string colorStyle: _colorTheme.style
+
+    // re-evaluated only when one of the six keys changes
+    readonly property var _colorTheme: _resolveColorTheme(_colorSourceValue, _colorSeedValue, _colorAccentValue,
+                                                         _colorStyleValue, _faceSeedValue, _faceAccentValue)
+    property string _appliedColorKey: ""
+
+    function _setRoles(m) {
+        color.primary = m.primary
+        color.primaryDim = m.primaryDim
+        color.primaryContainer = m.primaryContainer
+        color.onPrimary = m.onPrimary
+        color.onPrimaryContainer = m.onPrimaryContainer
+        color.secondary = m.secondary
+        color.secondaryDim = m.secondaryDim
+        color.secondaryContainer = m.secondaryContainer
+        color.onSecondary = m.onSecondary
+        color.onSecondaryContainer = m.onSecondaryContainer
+        color.tertiary = m.tertiary
+        color.tertiaryDim = m.tertiaryDim
+        color.tertiaryContainer = m.tertiaryContainer
+        color.onTertiary = m.onTertiary
+        color.onTertiaryContainer = m.onTertiaryContainer
+        color.surfaceContainerLow = m.surfaceContainerLow
+        color.surfaceContainer = m.surfaceContainer
+        color.surfaceContainerHigh = m.surfaceContainerHigh
+        color.onSurface = m.onSurface
+        color.onSurfaceVariant = m.onSurfaceVariant
+        color.outline = m.outline
+        color.outlineVariant = m.outlineVariant
+        color.background = m.background
+        color.onBackground = m.onBackground
+        color.error = m.error
+        color.errorDim = m.errorDim
+        color.errorContainer = m.errorContainer
+        color.onError = m.onError
+        color.onErrorContainer = m.onErrorContainer
+    }
+
+    /*!
+        Writes the 29 roles of the current theme to Theme.color: the static
+        palette for No theme, else a palette generated from the seed. A no-op
+        while nothing that matters changed; it runs when a key changes and once
+        at start.
+    */
+    function applyColorTheme(force) {
+        var t = _colorTheme
+        var key = t.themed ? (t.seed + "|" + t.accent + "|" + t.styleId) : "static"
+        if (!force && key === _appliedColorKey)
+            return
+        _appliedColorKey = key
+        var map = staticPalette
+        if (t.themed) {
+            var g = PaletteGenerator.generate(t.seed, t.accent, t.styleId)
+            if (g.primary !== undefined)
+                map = g
+        }
+        _setRoles(map)
+    }
+
+    on_ColorThemeChanged: applyColorTheme(false)
+    Component.onCompleted: applyColorTheme(true)
+
+    // the key values setColorTheme() writes (pure, so it can be tested)
+    function _colorThemeValues(source, seed) {
+        var src = (source === "preset" || source === "watchface") ? source : "static"
+        return {
+            source: src,
+            seed: src === "preset" ? (_normalColor(seed) || colorDefaultSeed) : "",
+            accent: "",
+            style: ""
+        }
+    }
+
+    /*!
+        Settings > Display > Color theme: choose "static" (No theme), "watchface"
+        (Match watch face) or "preset" with its seed (one of colorPresets). The
+        source is written last, so the palette is generated once.
+    */
+    function setColorTheme(source, seed) {
+        var v = _colorThemeValues(source, seed)
+        _colorStyleSetting.value = v.style
+        _colorAccentSetting.value = v.accent
+        _colorSeedSetting.value = v.seed
+        _colorSourceSetting.value = v.source
+    }
+
+    // the key values reportFaceColors() writes
+    function _faceColorValues(primary, accent) {
+        return { seed: _normalColor(primary), accent: _normalColor(accent) }
+    }
+
+    /*!
+        The launcher calls this when the watch face (or its colours) change:
+        the face's primary colour and optional accent as "#RRGGBB" (or "" for
+        a face that reports none; Match watch face then uses Moonstone). The
+        keys are only written when they differ.
+    */
+    function reportFaceColors(primary, accent) {
+        var v = _faceColorValues(primary, accent)
+        if (_faceAccentSetting.value !== v.accent)
+            _faceAccentSetting.value = v.accent
+        if (_faceSeedSetting.value !== v.seed)
+            _faceSeedSetting.value = v.seed
     }
 
     /* ---- State alphas ---- */

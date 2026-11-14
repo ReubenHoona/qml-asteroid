@@ -13,6 +13,7 @@ set(SRC
 	src/wordpredictor.cpp
 	src/spring.cpp
 	src/scrollphysics.cpp
+	src/palette.cpp
 )
 set(HEADERS
 	src/controls_plugin.h
@@ -30,6 +31,8 @@ set(HEADERS
 	src/wordpredictor.h
 	src/spring.h
 	src/scrollphysics.h
+	src/palette.h
+	src/palette_core.h
 )
 
 set(controls
