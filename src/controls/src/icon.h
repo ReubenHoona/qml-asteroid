@@ -42,6 +42,12 @@ class Icon : public QQuickPaintedItem
 
     Q_PROPERTY(QString name READ name WRITE setName NOTIFY nameChanged)
     Q_PROPERTY(QColor color READ color WRITE setColor NOTIFY colorChanged)
+    /* Draw the directional icons (arrows, chevrons, send, undo ...) mirrored
+     * while the layout is: the stock vector drawables that say
+     * autoMirrored="true". On by default. */
+    Q_PROPERTY(bool autoMirror READ autoMirror WRITE setAutoMirror NOTIFY autoMirrorChanged)
+    /* The icon is drawn mirrored now (autoMirror, a directional name, a mirrored layout) */
+    Q_PROPERTY(bool mirrored READ mirrored NOTIFY mirroredChanged)
 
 public:
     Icon();
@@ -52,12 +58,23 @@ public:
     QColor color();
     void setColor(QColor);
 
+    bool autoMirror() const;
+    void setAutoMirror(bool);
+    bool mirrored() const;
+    /* The icons whose picture points somewhere (a name of the icon set) */
+    Q_INVOKABLE static bool isDirectional(const QString &name);
+    /* Looks at the layout again: a LayoutMirroring that changed above this icon repaints it */
+    Q_INVOKABLE void refreshMirroring();
+
     void paint(QPainter *painter) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
+    void itemChange(ItemChange change, const ItemChangeData &value) override;
 
 signals:
     void nameChanged();
     void colorChanged();
+    void autoMirrorChanged();
+    void mirroredChanged();
 
 private:
     void updateBasePixmap();
@@ -68,6 +85,8 @@ private:
     QString m_name;
     QColor m_color;
     QPixmap m_pixmap;
+    bool m_autoMirror = true;
+    bool m_mirrored = false;
 };
 
 #endif // ICON_H

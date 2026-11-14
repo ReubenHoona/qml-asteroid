@@ -149,6 +149,10 @@ Item {
     // the revealed actions, in the space the card leaves at the right
     Item {
         id: _actions
+        // the swipe runs right to left in every language (as the back swipe is not mirrored): the
+        // actions behind the card keep their physical places
+        LayoutMirroring.enabled: false
+        LayoutMirroring.childrenInherit: true
         anchors {
             right: parent.right
             top: parent.top

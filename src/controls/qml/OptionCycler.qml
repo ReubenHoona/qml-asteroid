@@ -75,6 +75,8 @@ ListRow {
     property int valueFontSize: Theme.type.labelSmall.pixelSize
     /*! The choice page is open. */
     readonly property bool choosing: _chooser.active
+    /*! The choice page while it is open (for tests). */
+    readonly property Item chooserItem: _chooser.item
 
     secondaryText: currentValue
 
@@ -103,6 +105,9 @@ ListRow {
         z: 1000
         sourceComponent: Rectangle {
             color: Theme.color.background
+            // the window's content item is not below the application: it takes its layout direction
+            LayoutMirroring.enabled: root.LayoutMirroring.enabled
+            LayoutMirroring.childrenInherit: true
             MouseArea { anchors.fill: parent }   // the page below gets no taps
 
             BackSwipeArea {

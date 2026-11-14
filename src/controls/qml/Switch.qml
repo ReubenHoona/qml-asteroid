@@ -89,6 +89,11 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
+    /*! The thumb, for tests. */
+    readonly property Item _thumb: thumb
+    /*! The track, for tests. */
+    readonly property Item _track: track
+
     Accessible.role: Accessible.CheckBox
     Accessible.checkable: true
     Accessible.checked: checked
@@ -108,7 +113,9 @@ Item {
             width: control.thumbSize
             height: width
             radius: width / 2
-            x: control.thumbCenter - width / 2
+            // from the start of the track: the right in a right to left layout
+            x: control.LayoutMirroring.enabled ? track.width - control.thumbCenter - width / 2
+                                               : control.thumbCenter - width / 2
             anchors.verticalCenter: parent.verticalCenter
             color: control._mix(control._offThumb, control._onThumb, control.progress)
         }
@@ -118,7 +125,8 @@ Item {
             // a 24 dp box centred on the thumb
             width: Theme.dp(24)
             height: width
-            x: control.thumbCenter - width / 2
+            x: control.LayoutMirroring.enabled ? track.width - control.thumbCenter - width / 2
+                                               : control.thumbCenter - width / 2
             anchors.verticalCenter: parent.verticalCenter
             readonly property real p: control.progress
             scale: 1 - Math.pow(1 - p, 3)

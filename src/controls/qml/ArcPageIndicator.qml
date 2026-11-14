@@ -70,7 +70,8 @@ Item {
     }
 
     function _pointAt(p) {
-        var off = p - (shownCount - 1) / 2
+        // the first page is at the start: the right in a right to left layout
+        var off = (p - (shownCount - 1) / 2) * (indicator.LayoutMirroring.enabled ? -1 : 1)
         if (!DeviceSpecs.hasRoundScreen)
             return Qt.point(width / 2 + off * (_dot + _spacing), height - Theme.size.pageIndicatorEdge)
         // angle from the bottom of the circle, growing to the right
@@ -103,7 +104,7 @@ Item {
         // the band on a square screen
         visible: indicator.band && indicator.shownCount > 0 && !DeviceSpecs.hasRoundScreen
         readonly property point a: indicator._pointAt(0)
-        x: a.x - height / 2
+        x: indicator.LayoutMirroring.enabled ? a.x + height / 2 - width : a.x - height / 2
         y: a.y - height / 2
         height: Theme.size.pageIndicatorBand
         width: (indicator.shownCount - 1) * (indicator._dot + indicator._spacing) + height

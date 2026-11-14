@@ -35,6 +35,7 @@
 #include <QFile>
 #include <QQuickWindow>
 #include <QGuiApplication>
+#include <private/qquickitem_p.h>
 
 #define ICONS_DIRECTORY "/usr/share/icons/asteroid/"
 
@@ -94,7 +95,79 @@ void Icon::paint(QPainter *painter)
 {
     if(m_pixmap.isNull())
         return;
+    // read the layout now: a mirror that changed since the last paint shows
+    const bool mirror = m_autoMirror && isDirectional(m_name)
+            && QQuickItemPrivate::get(this)->effectiveLayoutMirror;
+    if (mirror) {
+        painter->save();
+        painter->translate(width(), 0);
+        painter->scale(-1, 1);
+    }
     painter->drawPixmap(0, 0, width(), height(), m_pixmap);
+    if (mirror)
+        painter->restore();
+}
+
+/*
+ * The pictures that point somewhere: the arrows and chevrons, send, return,
+ * undo and redo, exit, log in and out, backspace (stock's autoMirrored vector
+ * drawables). Not mirrored: media transport (play, skip, rewind, fast
+ * forward: the transport keeps its left-to-right order in every language),
+ * clocks, trending arrows and the "round" up and down arrows.
+ */
+bool Icon::isDirectional(const QString &name)
+{
+    static const char *const names[] = {
+        "ios-arrow-back", "ios-arrow-forward", "ios-arrow-round-back", "ios-arrow-round-forward",
+        "ios-arrow-dropleft", "ios-arrow-dropleft-circle", "ios-arrow-dropright", "ios-arrow-dropright-circle",
+        "ios-return-left", "ios-return-right", "ios-send", "ios-send-outline",
+        "ios-undo", "ios-undo-outline", "ios-redo", "ios-redo-outline",
+        "ios-exit", "ios-exit-outline", "ios-log-in", "ios-log-out",
+        "ios-backspace", "ios-backspace-outline",
+    };
+    for (const char *n : names) {
+        if (name == QLatin1String(n))
+            return true;
+    }
+    return false;
+}
+
+bool Icon::autoMirror() const
+{
+    return m_autoMirror;
+}
+
+void Icon::setAutoMirror(bool on)
+{
+    if (m_autoMirror == on)
+        return;
+    m_autoMirror = on;
+    emit autoMirrorChanged();
+    refreshMirroring();
+}
+
+bool Icon::mirrored() const
+{
+    return m_mirrored;
+}
+
+void Icon::refreshMirroring()
+{
+    const bool now = m_autoMirror && isDirectional(m_name)
+            && QQuickItemPrivate::get(this)->effectiveLayoutMirror;
+    if (now == m_mirrored)
+        return;
+    m_mirrored = now;
+    update();
+    emit mirroredChanged();
+}
+
+void Icon::itemChange(ItemChange change, const ItemChangeData &value)
+{
+    QQuickPaintedItem::itemChange(change, value);
+    // the parents decide the layout direction: look when this icon is placed
+    if (change == ItemParentHasChanged || change == ItemSceneChange)
+        refreshMirroring();
 }
 
 
@@ -125,6 +198,7 @@ void Icon::setName(QString name)
     updatePixmapColor();
     update();
     emit nameChanged();
+    refreshMirroring();
 }
 
 QColor Icon::color()

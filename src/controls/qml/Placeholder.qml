@@ -66,9 +66,14 @@ Item {
             readonly property real d: Math.sqrt(fill.width * fill.width + fill.height * fill.height)
             width: d
             height: d
-            x: fill.width * placeholder.sweep - width / 2
+            // the sweep runs from the start: from the right in a right to left layout
+            x: (placeholder.LayoutMirroring.enabled ? fill.width * (1 - placeholder.sweep) : fill.width * placeholder.sweep) - width / 2
             y: (fill.height - height) / 2
-            rotation: 45
+            rotation: placeholder.LayoutMirroring.enabled ? -45 : 45
+            transform: Scale {
+                origin.x: width / 2
+                xScale: placeholder.LayoutMirroring.enabled ? -1 : 1
+            }
             visible: placeholder.sweep > -0.5 && placeholder.sweep < 1.5
             gradient: Gradient {
                 orientation: Gradient.Horizontal

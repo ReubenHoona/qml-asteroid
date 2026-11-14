@@ -148,6 +148,55 @@ QtObject {
     /*! Wear OS treats screens 225 dp and wider as large (materialcore ResourcesKt.java:10-15). */
     readonly property bool isLargeScreen: screenWidthDp >= 225
 
+    /* ---- Layout direction (locale-formats-05) ---- */
+
+    /*! The locale whose text direction the layout follows (tests and previews set it). */
+    property var _locale: Qt.locale()
+    /*!
+        The language is written right to left (Arabic, Hebrew, Persian,
+        Sorani, Bakhtiari ...): Application mirrors its whole layout
+        (\c LayoutMirroring.enabled) and the directional icons flip.
+        Stock: supportsRtl in every system app, Start/End layouts follow the
+        locale. Not mirrored, as stock: the swipe back and the swipe to
+        dismiss (BasicSwipeToDismissBox "regardless of layout direction"),
+        the keyboard keys, media transport, arcs that run clockwise.
+    */
+    readonly property bool rtl: _locale.textDirection === Qt.RightToLeft || isRtlLanguage(_locale.name)
+                                || isRtlLanguage(Qt.uiLanguage)
+    /*!
+        The language codes written right to left that the language list offers (and a few more), for the
+        locales Qt's own database lacks (Bakhtiari, \c bqi, reads as the C locale): the code of a locale name
+        like \c bqi_IR or \c ckb-IQ.
+    */
+    readonly property var rtlLanguages: ["ar", "arc", "azb", "bqi", "ckb", "dv", "fa", "glk", "he", "iw", "ks", "lrc", "mzn",
+                                         "pnb", "ps", "sd", "ug", "ur", "yi"]
+    /*! The locale name (\c ar_EG, \c he, \c bqi-IR ...) is of a language written right to left. */
+    function isRtlLanguage(name: string): bool {
+        if (!name || name.length < 2)
+            return false
+        var code = String(name).split(/[_.@-]/)[0].toLowerCase()
+        return rtlLanguages.indexOf(code) >= 0
+    }
+    /*! \c Qt.RightToLeft or \c Qt.LeftToRight, for \c layoutDirection of views and positioners. */
+    readonly property int layoutDirection: rtl ? Qt.RightToLeft : Qt.LeftToRight
+    /*! wear_card_gradient_angle: 315, and 225 in a right to left layout (values-ldrtl). */
+    readonly property int cardGradientAngle: rtl ? 225 : 315
+    /*! wear_button_gradient_angle: 135, and 45 in a right to left layout (wear_button_gradient_angle_rtl). */
+    readonly property int buttonGradientAngle: rtl ? 45 : 135
+    /*!
+        The start and end of a gradient line for an Android gradient \a angle
+        (degrees: 0 left to right, 90 bottom to top, 315 top-left to
+        bottom-right, 225 top-right to bottom-left) over a \a w x \a h box,
+        for a \c LinearGradient: { x1, y1, x2, y2 }, running through the centre
+        and reaching the corners at 45 degrees.
+    */
+    function gradientLine(angle: real, w: real, h: real): var {
+        var a = angle * Math.PI / 180
+        var dx = Math.cos(a), dy = -Math.sin(a)
+        var half = (Math.abs(dx) * w + Math.abs(dy) * h) / 2
+        return { "x1": w / 2 - dx * half, "y1": h / 2 - dy * half, "x2": w / 2 + dx * half, "y2": h / 2 + dy * half }
+    }
+
     /* ---- Typography ---- */
 
     /*!

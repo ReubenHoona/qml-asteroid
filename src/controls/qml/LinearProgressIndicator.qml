@@ -46,10 +46,14 @@ Item {
     implicitHeight: thickness
     height: thickness
 
+    /*! The filled part, for tests. */
+    readonly property Item _indicator: indicator
+
     Accessible.role: Accessible.ProgressBar
 
     Rectangle {
         id: indicator
+        anchors.left: parent.left
         height: bar.thickness
         radius: height / 2
         width: bar._p > 0 ? Math.max(height, bar.width * bar._p) : 0
@@ -58,10 +62,10 @@ Item {
     }
     Rectangle {
         id: track
+        anchors.right: parent.right
         height: bar.thickness
         radius: height / 2
-        x: bar._p > 0 ? indicator.width + bar.gap : 0
-        width: Math.max(0, bar.width - x)
+        width: Math.max(0, bar.width - (bar._p > 0 ? indicator.width + bar.gap : 0))
         visible: bar._p < 1 && width > 0
         color: bar.trackColor
         Rectangle {

@@ -178,13 +178,16 @@ Item {
             height: toast.iconSize
             sourceSize.width: width
             sourceSize.height: height
-            x: toast.paddingSides
+            // at the start of the bubble: the right in a right to left layout
+            x: toast.LayoutMirroring.enabled ? _bubble.width - toast.paddingSides - width : toast.paddingSides
             anchors.verticalCenter: parent.verticalCenter
         }
         Text {
             id: _label
-            x: _icon.visible ? _icon.x + toast.iconSize + toast.iconGap : toast.paddingSides
-            width: _bubble.width - x - toast.paddingSides
+            readonly property real _start: _icon.visible ? toast.paddingSides + toast.iconSize + toast.iconGap
+                                                         : toast.paddingSides
+            x: toast.LayoutMirroring.enabled ? toast.paddingSides : _start
+            width: _bubble.width - _start - toast.paddingSides
             anchors.verticalCenter: parent.verticalCenter
             text: toast.text
             color: "#000000"

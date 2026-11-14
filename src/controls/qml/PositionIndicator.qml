@@ -158,9 +158,11 @@ Item {
                 height: share + indicator._thickness
                 radius: width / 2
                 color: arc.color
-                x: arc.width / 2 + indicator._radius * Math.cos(angle) - width / 2
+                // at the end of the screen: the left edge in a right to left layout (the arc is mirrored)
+                readonly property bool mirrored: indicator.LayoutMirroring.enabled
+                x: arc.width / 2 + (mirrored ? -1 : 1) * indicator._radius * Math.cos(angle) - width / 2
                 y: arc.height / 2 + indicator._radius * Math.sin(angle) - height / 2
-                rotation: angle * 180 / Math.PI
+                rotation: (mirrored ? -1 : 1) * angle * 180 / Math.PI
             }
         }
     }

@@ -62,6 +62,14 @@ Application_p {
     id: _application
     anchors.fill: parent
 
+    // The layout follows the language (locale-formats-05): rows, anchors, lists
+    // and the directional icons mirror in Arabic, Hebrew, Persian ... as stock's
+    // supportsRtl layouts do. The swipe back and the swipe to dismiss stay as they
+    // are (they work on the touch position, BasicSwipeToDismissBox says "regardless
+    // of layout direction"), and so do the keyboard's keys (WearKeyboard).
+    LayoutMirroring.enabled: Theme.rtl
+    LayoutMirroring.childrenInherit: true
+
     /*!
         Draw the animated \l FlatMesh gradient behind the content. Off by
         default: every Wear OS application screen is plain black

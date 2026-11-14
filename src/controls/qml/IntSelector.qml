@@ -85,6 +85,12 @@ ListRow {
 
     highlightBarEnabled: false
 
+    /*! The decrease button, the increase button and the selected bar, for tests. */
+    readonly property Item _minusButton: buttonMinus
+    readonly property Item _plusButton: buttonPlus
+    readonly property Item _selectedBar: selected
+    readonly property Item _dragArea: dragArea
+
     function _step(d) {
         var v = Math.max(min, Math.min(max, value + d))
         if (v === value)
@@ -105,6 +111,7 @@ ListRow {
 
         MouseArea {
             id: buttonMinus
+            anchors.left: parent.left
             width: slider.buttonWidth
             height: parent.height
             enabled: selector.enabled
@@ -166,14 +173,15 @@ ListRow {
                 Rectangle {
                     id: unselected
                     anchors.verticalCenter: parent.verticalCenter
-                    x: bar.shownWidth
-                    width: Math.max(0, bar.width - x)
+                    anchors.right: parent.right
+                    width: Math.max(0, bar.width - bar.shownWidth)
                     height: Theme.size.sliderUnselectedBar
                     radius: Theme.dp(2)
                     color: Theme.color.sliderTrackOnSurface
                 }
                 Rectangle {
                     id: selected
+                    anchors.left: parent.left
                     width: bar.shownWidth
                     height: parent.height
                     radius: height / 2
@@ -230,6 +238,8 @@ ListRow {
             }
             function updateValue(mx) {
                 var f = Math.max(0, Math.min(1, mx / Math.max(1, width)))
+                if (dragArea.LayoutMirroring.enabled)
+                    f = 1 - f   // the value grows from the right
                 var v = Math.max(selector.min, Math.min(selector.max,
                         Math.round((selector.min + f * (selector.max - selector.min)) / selector.stepSize) * selector.stepSize))
                 if (v !== selector.value)
