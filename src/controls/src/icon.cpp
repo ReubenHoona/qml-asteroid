@@ -86,9 +86,14 @@ void Icon::updatePixmapColor()
     if(m_pixmap.isNull())
         return;
 
+    // tint with the opaque colour: SourceIn multiplies the pixmap's alpha by
+    // the colour's, so a translucent (disabled) colour stayed in the pixmap
+    // after the colour turned opaque again; the alpha is applied in paint()
+    QColor opaque = m_color;
+    opaque.setAlphaF(1.0);
     QPainter painter(&m_pixmap);
     painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
-    painter.fillRect(QRect(0, 0, width(), height()), m_color);
+    painter.fillRect(QRect(0, 0, width(), height()), opaque);
 }
 
 void Icon::paint(QPainter *painter)
@@ -103,7 +108,10 @@ void Icon::paint(QPainter *painter)
         painter->translate(width(), 0);
         painter->scale(-1, 1);
     }
+    const qreal opacity = painter->opacity();
+    painter->setOpacity(opacity * m_color.alphaF());
     painter->drawPixmap(0, 0, width(), height(), m_pixmap);
+    painter->setOpacity(opacity);
     if (mirror)
         painter->restore();
 }
