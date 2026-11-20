@@ -68,6 +68,10 @@ MouseArea {
     property real preferredHeight: Theme.size.edgeButton
     /*! The list it ends; null: always shown in full. */
     property Item flickable: null
+    /*! Width of the round screen the button hugs (px). The content window
+        keeps its 20 dp from the screen edge, not from the button's own
+        sides, so a narrower button (a tile's 52 / 70 %) keeps its text room. */
+    property real screenWidth: Window.width > 0 ? Window.width : width
 
     function _a(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
     property color containerColor: enabled ? Theme.color.primary : _a(Theme.color.onSurface, Theme.alpha.disabledContainer)
@@ -112,7 +116,9 @@ MouseArea {
         degrees; \c th the ellipse start angle; \c fade (finalFadeProgress);
         \c sidePadding and \c contentHalfWidth for the content window.
     */
-    function geometry(W, H) {
+    function geometry(W, H, S) {
+        if (!(S > 0))
+            S = W
         var bp = Theme.size.edgeButtonBottomGap
         var xs = Theme.size.edgeButtonExtraSmall
         var fp = Math.max(0, 1 - H / xs)
@@ -129,14 +135,16 @@ MouseArea {
         var k = py / (tx + 1)
         var qx = px + ty * k, qy = py - tx * k
         var sweep = Math.atan2(py - qy, px - qx) * 180 / Math.PI + 90
-        var hw = W / 2, dy = W / 2 - bp - E / 2
-        var side = W / 2 - Math.sqrt(Math.max(0, hw * hw - dy * dy)) + Theme.size.edgeButtonSideMargin
+        // the screen circle (radius S / 2) at the content's height, the button centred on it
+        var hw = S / 2, dy = S / 2 - bp - E / 2
+        var chord = Math.sqrt(Math.max(0, hw * hw - dy * dy)) - Theme.size.edgeButtonSideMargin
+        var side = W / 2 - Math.max(0, Math.min(W / 2, chord))
         var r = H - E / 2
         return { a: a, b: b, cx: cx, cy: cy, k: k, qx: qx, qy: qy, sweep: sweep,
                  th: th * 180 / Math.PI, fade: fp, ellipseHeight: E,
                  sidePadding: side, contentHalfWidth: Math.max(0, (W - 2 * side) / 2 - r) }
     }
-    readonly property var shape: geometry(width, Math.max(1, height))
+    readonly property var shape: geometry(width, Math.max(1, height), screenWidth)
 
     Shape {
         id: _shape
