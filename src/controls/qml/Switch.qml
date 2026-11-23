@@ -57,13 +57,17 @@ Item {
     /*! Toggle on tap (off when a row handles the taps). */
     property bool toggleOnClick: true
     /*! Animation progress, 0 (off) to 1 (on). */
-    property real progress: checked ? 1 : 0
-    Behavior on progress {
-        NumberAnimation {
-            duration: Motion.springDuration(Motion.standard.fastEffects.stiffness)
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Motion.springEasing
-        }
+    // (written by the spring below, which sets the first value as it is: no binding here)
+    property real progress: 0
+    // on the fast effects spring itself, 1.0/1400 (SwitchButtonKt.java:144, motion G5 G6): toggled again
+    // mid-way, it keeps its speed
+    WearSpring {
+        target: control
+        property: "progress"
+        to: control.checked ? 1 : 0
+        stiffness: Motion.standard.fastEffects.stiffness
+        dampingRatio: 1.0
+        visibilityThreshold: 0.001
     }
 
     function _a(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }

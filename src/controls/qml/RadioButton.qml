@@ -45,13 +45,17 @@ Button {
     /*! This choice is selected. */
     property bool checked: false
     /*! Dot scale, 0 to 1. */
-    property real dotScale: checked ? 1 : 0
-    Behavior on dotScale {
-        NumberAnimation {
-            duration: Motion.springDuration(Motion.standard.fastEffects.stiffness)
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Motion.springEasing
-        }
+    // (written by the spring below, which sets the first value as it is: no binding here)
+    property real dotScale: 0
+    // on the fast effects spring itself, 1.0/1400 (RadioButtonKt.java:423 fastEffectsSpec, motion G5 G6): toggled again
+    // mid-way, it keeps its speed
+    WearSpring {
+        target: row
+        property: "dotScale"
+        to: row.checked ? 1 : 0
+        stiffness: Motion.standard.fastEffects.stiffness
+        dampingRatio: 1.0
+        visibilityThreshold: 0.001
     }
 
     variant: "tonal"
