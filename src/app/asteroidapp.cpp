@@ -34,6 +34,7 @@
 #include <QQuickView>
 #include <QScreen>
 #include <QSettings>
+#include <QSurfaceFormat>
 #include <QTranslator>
 #include <QUrl>
 
@@ -105,6 +106,17 @@ namespace AsteroidApp {
     QQuickView *createView()
     {
         QQuickView *view = MDeclarativeCache::qQuickView();
+        // 8 bits per colour, as stock app windows (RGBA_8888) draw: with no
+        // colour sizes asked for, EGL hands out its smallest config (RGB565)
+        // and every flat fill comes out dithered. Only the window decoration
+        // used to ask (8 bits of alpha, so ARGB8888), and windows started
+        // without one asked for nothing. Set before the platform window
+        // exists; the booster's cached view has not been created yet either.
+        QSurfaceFormat format = view->requestedFormat();
+        format.setRedBufferSize(8);
+        format.setGreenBufferSize(8);
+        format.setBlueBufferSize(8);
+        view->setFormat(format);
         QString path = "/usr/share/applications/" + appName() + ".desktop";
         QSettings applicationSettings(path, QSettings::IniFormat);
         auto applicationName = applicationSettings.value("Desktop Entry/Name");
