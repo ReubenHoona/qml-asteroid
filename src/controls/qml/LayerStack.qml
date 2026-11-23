@@ -17,7 +17,9 @@
  */
 
 import QtQuick
+import QtQuick.Effects
 import org.asteroid.controls
+import org.asteroid.utils
 
 
 /*!
@@ -118,7 +120,13 @@ Item {
      * 0.6 (1.0/1400), then hidden.
      * pop, linear in the back progress p: the top page x = W p, scale 1 ->
      * 0.8; the page below x = -W/2 (1 - p), scale 0.8 -> 1, alpha 0.5 -> 1;
-     * commit and cancel on 1.0/1500 from where the finger left it. */
+     * commit and cancel on 1.0/1500 from where the finger left it.
+     * On a round screen each page is a circle: CP3A clips every screen to
+     * CircleShape and draws its background inside the clip
+     * (PredictiveBackNavHostKt$$ExternalSyntheticLambda12.java:61-64, the
+     * round flag from Configuration.isScreenRound(),
+     * PredictiveBackNavHostKt.java:873-879), so a moving page shows an arc
+     * and the page below shows outside it. */
     property bool _popActive: false
     property bool _dragging: false
     readonly property real _p: _dragging ? gestureArea.smoothedProgress : popSpring.value
@@ -215,6 +223,28 @@ Item {
             height: layersStack.height
             clip: true
             visible: isTop || (isBelow && layersStack._belowVisible)
+            /* The round clip, only while the two pages move: at rest the
+             * screen's own round edge hides the corners, so there is nothing
+             * to draw offscreen. The mask's anti-aliased edge is kept
+             * (threshold 0.5, spread 1: a smooth step over its alpha). */
+            readonly property bool roundClip: DeviceSpecs.hasRoundScreen && (isTop || isBelow)
+                                              && (layersStack.pushing || layersStack._popActive)
+            layer.enabled: roundClip
+            layer.smooth: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskThresholdMin: 0.5
+                maskSpreadAtMin: 1.0
+                maskSource: ShaderEffectSource {
+                    hideSource: true
+                    smooth: true
+                    sourceItem: Rectangle {
+                        width: frame.width
+                        height: frame.height
+                        radius: width / 2
+                    }
+                }
+            }
             opacity: isTop ? layersStack._topOpacity : isBelow ? layersStack._belowOpacity : 1
             transform: [
                 Scale {
@@ -230,6 +260,7 @@ Item {
             Rectangle {
                 anchors.fill: parent
                 color: layersStack.pageBackground
+                radius: DeviceSpecs.hasRoundScreen ? width / 2 : 0
             }
         }
     }
