@@ -94,7 +94,8 @@ namespace AsteroidApp {
             // and a shell do not, and Qt then draws its own frame (a 30 px
             // cap with the app's name, 3 px borders). Set before any window
             // is made: Qt reads it once, when the first window asks whether
-            // it gets a decoration (qwaylanddisplay.cpp:946-948).
+            // it gets a decoration (QWaylandDisplay::supportsWindowDecoration,
+            // a static qgetenv: qwaylanddisplay.cpp:951-956 in Qt 6.11.3).
             qputenv("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1");
             app = MDeclarativeCache::qApplication(argc, argv);
 
