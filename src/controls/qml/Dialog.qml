@@ -46,8 +46,9 @@ import org.asteroid.controls
         scales lerp(1, 0.7, p) with its right edge on the screen's, under a
         content scrim min(p / 2, 0.3); the screen under it shows through a
         scrim 0.5 (1 - p) while \l behind scales lerp(0.85, 1.0, p). Let go
-        past half the width or at 800 dp/s it slides off (past p 0.7 it runs
-        to the right edge), else it comes back, both in 200 ms on
+        at half the width or more (whatever its speed, even flung back) or
+        flung right at 800 dp/s, it slides off (past p 0.7 it runs to the
+        right edge), else it comes back, both in 200 ms on
         LinearOutSlowIn (0, 0, 0.2, 1); \l dismissRequested() follows the
         slide, and a dialog that stays shown after it comes back at rest;
     \li Reduce animations makes every spring land at once (WearSpring).
@@ -264,10 +265,12 @@ Item {
         }
         onFinished: {
             tracking = false
-            // stock's anchors: past half the width, or a fling of 800 dp/s, dismisses;
-            // a fling of 800 dp/s back cancels
+            // stock's anchors (SwipeableV2State.computeTarget from Default): off
+            // rest, a fling of 800 dp/s right, or half the width at any velocity,
+            // dismisses; else it goes back
             var vmin = 800 * Math.min(dialog.width, dialog.height) / 192
-            var dismiss = velocity >= vmin || (velocity > -vmin && dialog._offset > dialog.width / 2)
+            var dismiss = dialog._offset > 0
+                    && (velocity >= vmin || dialog._offset >= dialog.width / 2)
             dialog._squeeze = !dismiss
             _settle.to = dismiss ? dialog.width : 0
             _settle.restart()
