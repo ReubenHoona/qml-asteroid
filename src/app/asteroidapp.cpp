@@ -90,11 +90,14 @@ namespace AsteroidApp {
 
         if (app == NULL) {
             // Stock app windows have no title bar. The launcher passes this
-            // on to the apps it starts, but D-Bus activation, the booster
-            // and a shell do not, and Qt then draws its own frame (a 30 px
-            // cap with the app's name, 3 px borders). Set before any window
-            // is made: Qt reads it once, when the first window asks whether
-            // it gets a decoration (QWaylandDisplay::supportsWindowDecoration,
+            // on to the apps it starts, and since meta-eos64 1b18c76 so does
+            // the booster environment (asteroid-qt6.conf) for invoker starts,
+            // but a direct start (a D-Bus service that runs the binary itself,
+            // a shell, a test harness) does not, and Qt then draws its own
+            // frame (a 30 px cap with the app's name, 3 px borders). Set it
+            // here so every start path is covered, before any window is
+            // made: Qt reads it once, when the first window asks whether it
+            // gets a decoration (QWaylandDisplay::supportsWindowDecoration,
             // a static qgetenv: qwaylanddisplay.cpp:951-956 in Qt 6.11.3).
             qputenv("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1");
             app = MDeclarativeCache::qApplication(argc, argv);
