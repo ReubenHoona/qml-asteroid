@@ -26,9 +26,10 @@ class WearSpring;
  * (round-aware, as BorderGestureArea), as Wear OS does for content that
  * scrolls horizontally.
  *
- * While a drag is taken, "value" follows the finger (0 .. width) and
- * "smoothedProgress" chases value / width on a spring (stiffness 1500,
- * damping 1, stock BackProgressAnimator). "armed" is stock's "will go back":
+ * While a drag is taken, "value" follows the finger (minimumValue .. width;
+ * minimumValue is 0 unless set) and "smoothedProgress" chases value / width
+ * on a spring (stiffness 1500, damping 1, stock BackProgressAnimator).
+ * "armed" is stock's "will go back":
  * the swipe is past 0.33 of the width and the finger is not moving left;
  * it plays the threshold haptic (a click, at most once per 100 ms) when it
  * turns on, unless thresholdHaptic is false. On release "finished" is
@@ -64,6 +65,10 @@ class BackSwipeArea : public QQuickItem
     /* Whether arming plays the threshold haptic (and emits thresholdCrossed):
      * the back gesture does; stock's SwipeToDismissBox plays none (Dialog) */
     Q_PROPERTY(bool thresholdHaptic READ thresholdHaptic WRITE setThresholdHaptic NOTIFY thresholdHapticChanged)
+    /* The lowest "value" a drag reaches, px (<= 0; 0: not left of where the
+     * swipe was taken). A Dialog that catches its box mid-settle at x sets
+     * -x, so the finger can take the box back to rest */
+    Q_PROPERTY(qreal minimumValue READ minimumValue WRITE setMinimumValue NOTIFY minimumValueChanged)
 
 public:
     explicit BackSwipeArea(QQuickItem *parent = nullptr);
@@ -91,6 +96,8 @@ public:
     void setSwipeEnabled(bool e);
     bool thresholdHaptic() const { return m_thresholdHaptic; }
     void setThresholdHaptic(bool h);
+    qreal minimumValue() const { return m_minimumValue; }
+    void setMinimumValue(qreal v);
 
     /* Ends a gesture whose animation is done: value 0, not active */
     Q_INVOKABLE void reset();
@@ -106,6 +113,7 @@ signals:
     void edgeOnlyChanged();
     void swipeEnabledChanged();
     void thresholdHapticChanged();
+    void minimumValueChanged();
     void started();
     void finished();
     void armedChanged();
@@ -145,6 +153,7 @@ private:
     bool m_edgeOnly = false;
     bool m_swipeEnabled = true;
     bool m_thresholdHaptic = true;
+    qreal m_minimumValue = 0;
     QPointF m_start;
     qreal m_value = 0;
     qreal m_velocity = 0;

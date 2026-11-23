@@ -155,6 +155,15 @@ void BackSwipeArea::setThresholdHaptic(bool h)
     emit thresholdHapticChanged();
 }
 
+void BackSwipeArea::setMinimumValue(qreal v)
+{
+    v = qMin<qreal>(0, v);
+    if (qFuzzyCompare(v + 1, m_minimumValue + 1))
+        return;
+    m_minimumValue = v;
+    emit minimumValueChanged();
+}
+
 void BackSwipeArea::reset()
 {
     m_tracking = false;
@@ -308,7 +317,7 @@ bool BackSwipeArea::move(const QPointF &scenePos)
         emit started();
         return true;
     }
-    setValue(qBound<qreal>(0, scenePos.x() - m_start.x(), width()));
+    setValue(qBound<qreal>(m_minimumValue, scenePos.x() - m_start.x(), width()));
     /* the progress chases the finger on a spring, keeping its speed */
     m_smooth->animateTo(progress());
     setArmed(scenePos.x() - m_downX > COMMIT_FRACTION * width() && m_lastDx >= 0);

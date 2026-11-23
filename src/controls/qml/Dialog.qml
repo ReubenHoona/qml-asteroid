@@ -51,7 +51,8 @@ import org.asteroid.controls
         right edge), else it comes back, both in 200 ms on
         LinearOutSlowIn (0, 0, 0.2, 1); \l dismissRequested() follows the
         slide, and a dialog that stays shown after it comes back at rest;
-        no haptic plays on the way (stock has none);
+        no haptic plays on the way (stock has none); a swipe that starts
+        while it settles takes it over where it is;
     \li Reduce animations makes every spring land at once (WearSpring).
     \endlist
 
@@ -160,6 +161,9 @@ Item {
     // the offset in px; squeezed (right edge pinned) or sliding off (let go to dismiss)
     property real _offset: 0
     property bool _squeeze: true
+    // where the finger took the box over: 0 from rest, the box's offset when a
+    // swipe catches it mid-settle
+    property real _swipeBase: 0
     readonly property real _p: width > 0 ? Math.max(0, Math.min(1, _offset / width)) : 0
     readonly property real _swipeScale: Math.max(0.7, Math.min(1, 1 - 0.3 * _p))
     readonly property real _squeezeX: Math.max(0, (1 - _swipeScale) * width / 2)
@@ -173,6 +177,7 @@ Item {
     }
     function _endSwipe() {
         _settle.stop()
+        _swipeBase = 0
         _swiping = false
         _squeeze = true
         _offset = 0
@@ -252,19 +257,31 @@ Item {
         swipeEnabled: dialog.swipeToDismiss && dialog._shown
         // stock's swipe-to-dismiss box plays no threshold haptic
         thresholdHaptic: false
+        // a swipe that caught the box mid-settle may take it back to rest
+        minimumValue: -dialog._swipeBase
 
         property bool tracking: false
         onStarted: {
             tracking = true
+            // stock's drag takes the box over where it is, also while it
+            // settles: a swipe that starts during the 200 ms goes on from
+            // there (and may still bring it back), not from rest
+            var caught = _settle.running
             _settle.stop()
-            dialog._squeeze = true
-            dialog._offset = 0
+            dialog._swipeBase = caught ? dialog._offset : 0
+            dialog._offset = dialog._swipeBase
+            // squeeze mode is back once the box is short of half (stock:
+            // the target is Default again)
+            if (dialog._offset < dialog.width / 2)
+                dialog._squeeze = true
             dialog._swiping = true
         }
         onValueChanged: {
             if (!tracking)
                 return
-            dialog._offset = Math.max(0, value)
+            dialog._offset = Math.max(0, Math.min(dialog.width, dialog._swipeBase + value))
+            if (!dialog._squeeze && dialog._offset < dialog.width / 2)
+                dialog._squeeze = true
         }
         onFinished: {
             tracking = false
