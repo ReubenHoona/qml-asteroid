@@ -30,6 +30,15 @@ import org.asteroid.controls
     \list
     \li offset = how far the first item has scrolled. Up to 36 dp:
         progress p = offset / 36 dp, alpha 1; beyond: p = 1, alpha 0.
+    \li The stage is Scrolling while the list moves: a finger drag or
+        flick (Flickable.moving), and any move of contentY without a finger
+        (the crown, which RotaryInput drives by writing contentY, the stock
+        spline fling, a scroll to an item), as stock runs its rotary scroll
+        inside ScrollableState.scroll, so isScrollInProgress holds
+        (ScreenContent.java:68-83, RotaryScrollHandler$scrollToTarget$1.java:57).
+        Idle 2 s after the last move ($UpdateIdlingDetectorIfNeeded$2$1.java:45);
+        a new view starts New (also for an offset that changes before the
+        view's own change is handled).
     \li While the screen stage is not Scrolling (New, or Idle 2 s after the
         list stops), a time text that is gone (alpha 0) or more than 55 %
         away comes back: p = 0, alpha 1.
@@ -56,6 +65,11 @@ Item {
     readonly property real maxShift: Theme.dp(24)
     /*! Screen stage: 0 New, 1 Idle, 2 Scrolling (ScreenStage). */
     property int stage: 0
+    // the view the stage belongs to: until onFlickableChanged has run for a
+    // new view (its offset and _valid may change first), the rule sees New
+    property Item _stageView: null
+    // its contentY when the offset last changed
+    property real _contentY: 0
     /*! Time after the list stops before the stage is Idle (ms). */
     readonly property int idleDelay: 2000
 
@@ -76,10 +90,27 @@ Item {
     width: 0
     height: 0
 
-    onOffsetChanged: evaluate()
+    onOffsetChanged: {
+        // the crown and the other scrolls without a finger: Flickable.moving
+        // stays false, the content moves all the same (a margin change or
+        // an originY shift moves no content and is not a scroll); the stage
+        // is set here, where the offset is already the new one
+        var f = flickable as Flickable
+        if (f && f === _stageView) {
+            if (f.contentY !== _contentY && _valid && !f.moving) {
+                _idle.restart()
+                stage = 2
+            }
+            _contentY = f.contentY
+        }
+        evaluate()
+    }
     onStageChanged: evaluate()
     on_ValidChanged: evaluate()
     onFlickableChanged: {
+        _stageView = flickable
+        var f = flickable as Flickable
+        _contentY = f ? f.contentY : 0
         stage = 0
         _idle.restart()
         evaluate()
@@ -130,7 +161,8 @@ Item {
         } else {
             p = Math.max(0, Math.min(1, offset / threshold)); a = 1
         }
-        var z = stage !== 2 && (a === 0 || p > 0.55)
+        var st = _stageView === flickable ? stage : 0
+        var z = st !== 2 && (a === 0 || p > 0.55)
         if (z) {
             p = 0; a = 1
         }
@@ -146,7 +178,7 @@ Item {
             }
         }
         if (p !== progressTarget) {
-            var snap = !(p === 0 || progressTarget === 0 || stage === 0) || (z && stage !== 0)
+            var snap = !(p === 0 || progressTarget === 0 || st === 0) || (z && st !== 0)
             progressTarget = p
             _progressAnim.stop()
             if (snap) {
