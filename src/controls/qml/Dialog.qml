@@ -39,9 +39,17 @@ import org.asteroid.controls
         1.0 -> 1.25 on 1125;
     \li \l behind (the screen under the dialog) scales 1.0 -> 0.85 on show
         and back on hide, on 1125;
-    \li a swipe right drags the dialog with the finger while \l behind scales
-        lerp(0.85, 1.0, dx / width); stock's back decision (BackSwipeArea)
-        dismisses it;
+    \li a swipe right is BasicSwipeToDismissBox (motion B7;
+        BasicSwipeToDismissBoxKt.java:53, its ExternalSyntheticLambda8,
+        Lambda9, Lambda11, SwipeableV2Kt$$ExternalSyntheticLambda0.java:10,
+        SwipeableV2State.java:169): at the progress p = dx / width the dialog
+        scales lerp(1, 0.7, p) with its right edge on the screen's, under a
+        content scrim min(p / 2, 0.3); the screen under it shows through a
+        scrim 0.5 (1 - p) while \l behind scales lerp(0.85, 1.0, p). Let go
+        past half the width or at 800 dp/s it slides off (past p 0.7 it runs
+        to the right edge), else it comes back, both in 200 ms on
+        LinearOutSlowIn (0, 0, 0.2, 1); \l dismissRequested() follows the
+        slide;
     \li Reduce animations makes every spring land at once (WearSpring).
     \endlist
 
@@ -86,8 +94,8 @@ Item {
     readonly property real alpha: _alpha.value
     /*! Content scale now. */
     readonly property real contentScale: _scale.value
-    /*! Horizontal offset of the surface from the swipe, px. */
-    readonly property real swipeOffset: _surface.x
+    /*! Horizontal offset of the swipe, px (the finger's, then the settle's). */
+    readonly property real swipeOffset: _offset
 
     /* ---- stock numbers ---- */
     /*! Content scale at the start of the entry and the end of the exit. */
@@ -115,7 +123,7 @@ Item {
         if (!active) {
             _alpha.snapTo(0)
             _scale.snapTo(enterScale)
-            _drag.snapTo(0)
+            _endSwipe()
         }
         _shown = true
         _alpha.stiffness = alphaInStiffness
@@ -142,6 +150,28 @@ Item {
 
     property bool _shown: false
 
+    /* ---- the swipe to dismiss (B7) ---- */
+    // a swipe is on (the finger, or its 200 ms settle)
+    property bool _swiping: false
+    // the offset in px; squeezed (right edge pinned) or sliding off (let go to dismiss)
+    property real _offset: 0
+    property bool _squeeze: true
+    readonly property real _p: width > 0 ? Math.max(0, Math.min(1, _offset / width)) : 0
+    readonly property real _swipeScale: Math.max(0.7, Math.min(1, 1 - 0.3 * _p))
+    readonly property real _squeezeX: Math.max(0, (1 - _swipeScale) * width / 2)
+    readonly property real _surfaceX: _squeeze ? _squeezeX
+                                               : _squeezeX + (width - _squeezeX) * Math.max(0, _p - 0.7) / 0.3
+    on_OffsetChanged: {
+        if (_swiping && _behind.target)
+            _behind.snapTo(behindScale + (1 - behindScale) * _p)
+    }
+    function _endSwipe() {
+        _settle.stop()
+        _swiping = false
+        _squeeze = true
+        _offset = 0
+    }
+
     anchors.fill: parent
     visible: active
     opacity: _alpha.value
@@ -153,7 +183,7 @@ Item {
         visibilityThreshold: 0.002
         onFinished: {
             if (!dialog._shown && value <= 0.002) {
-                _drag.snapTo(0)
+                dialog._endSwipe()
                 dialog.closed()
             }
         }
@@ -171,12 +201,24 @@ Item {
         dampingRatio: 1.0
         visibilityThreshold: 0.0005
     }
-    // the swipe offset in px once the finger has let go
-    WearSpring {
-        id: _drag
-        stiffness: Motion.inAppBack.settle.stiffness
-        dampingRatio: 1.0
-        visibilityThreshold: 0.5
+    // the settle once the finger has let go: SWIPE_TO_DISMISS_BOX_ANIMATION_SPEC,
+    // tween(200, LinearOutSlowInEasing); off the screen it dismisses
+    NumberAnimation {
+        id: _settle
+        target: dialog
+        property: "_offset"
+        duration: Motion.duration(200)
+        easing.type: Easing.BezierSpline
+        easing.bezierCurve: Motion.easing.linearOutSlowIn
+        onFinished: {
+            if (to > 0) {
+                dialog.dismissRequested()
+                if (dialog.closeOnSwipe)
+                    dialog.close()
+            } else {
+                dialog._endSwipe()
+            }
+        }
     }
 
     // only dialogs that may hold the display (confirmations) talk to mce
@@ -198,36 +240,42 @@ Item {
         property bool tracking: false
         onStarted: {
             tracking = true
-            _drag.snapTo(0)
+            _settle.stop()
+            dialog._squeeze = true
+            dialog._offset = 0
+            dialog._swiping = true
         }
         onValueChanged: {
             if (!tracking)
                 return
-            _drag.snapTo(Math.max(0, value))
-            if (_behind.target)
-                _behind.snapTo(dialog.behindScale + (1 - dialog.behindScale) * progress)
+            dialog._offset = Math.max(0, value)
         }
         onFinished: {
             tracking = false
-            var v = velocity
-            if (committed) {
-                _drag.animateTo(dialog.width, v)
-                dialog.dismissRequested()
-                if (dialog.closeOnSwipe)
-                    dialog.close()
-            } else {
-                _drag.animateTo(0, v)
-                if (_behind.target)
-                    _behind.animateTo(dialog.behindScale)
-            }
+            // stock's anchors: past half the width, or a fling of 800 dp/s, dismisses;
+            // a fling of 800 dp/s back cancels
+            var vmin = 800 * Math.min(dialog.width, dialog.height) / 192
+            var dismiss = velocity >= vmin || (velocity > -vmin && dialog._offset > dialog.width / 2)
+            dialog._squeeze = !dismiss
+            _settle.to = dismiss ? dialog.width : 0
+            _settle.restart()
             reset()
+        }
+
+        // the screen under the dialog shows through a black scrim of 0.5 (1 - p)
+        Rectangle {
+            anchors.fill: parent
+            color: "#000000"
+            opacity: 0.5 * (1 - dialog._p)
+            visible: dialog._swiping
         }
 
         Item {
             id: _surface
             width: dialog.width
             height: dialog.height
-            x: _drag.value
+            x: dialog._surfaceX
+            scale: dialog._swipeScale
 
             Rectangle {
                 anchors.fill: parent
@@ -242,6 +290,13 @@ Item {
                 id: _content
                 anchors.fill: parent
                 scale: _scale.value
+            }
+            // the content scrim of the swipe, min(p / 2, 0.3)
+            Rectangle {
+                anchors.fill: parent
+                color: "#000000"
+                opacity: Math.min(dialog._p / 2, 0.3)
+                visible: dialog._swiping && opacity > 0
             }
         }
     }
