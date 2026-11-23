@@ -91,14 +91,17 @@ Item {
     /*! The fade time: the stiffness 400 spring, about 332 ms. */
     readonly property int fadeDuration: Motion.springDuration(400)
 
-    opacity: shown && _scrollable ? 1 : 0
+    opacity: 0
     visible: opacity > 0
-    Behavior on opacity {
-        NumberAnimation {
-            duration: indicator.fadeDuration
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Motion.springEasing
-        }
+    /* the fade runs on the stock spring itself, 1.0/400 (ScreenContent
+     * UpdateIdlingDetectorIfNeeded, motion D14): turned round mid-way, it
+     * keeps its speed */
+    WearSpring {
+        target: indicator
+        property: "opacity"
+        to: indicator.shown && indicator._scrollable ? 1 : 0
+        stiffness: 400
+        dampingRatio: 1.0
     }
 
     Timer {

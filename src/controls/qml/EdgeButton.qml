@@ -90,14 +90,18 @@ MouseArea {
     }
     readonly property real _target: Math.max(0, Math.min(preferredHeight, preferredHeight - remainingScroll))
     /*! The height shown now. */
-    property real shownHeight: _target
-    Behavior on shownHeight {
+    // (written by the spring below, which sets the first value as it is: no binding here)
+    property real shownHeight: 0
+    // on the stock spring itself, 1.0/400 (ScreenScaffoldKt.java:41, motion D16); it follows the
+    // list at once while the list moves
+    WearSpring {
+        target: edgeButton
+        property: "shownHeight"
+        to: edgeButton._target
         enabled: !edgeButton.flickable || !edgeButton.flickable.moving
-        NumberAnimation {
-            duration: Motion.springDuration(400)
-            easing.type: Easing.BezierSpline
-            easing.bezierCurve: Motion.springEasing
-        }
+        stiffness: 400
+        dampingRatio: 1.0
+        visibilityThreshold: 0.5
     }
 
     width: parent ? parent.width : Theme.dp(192)
