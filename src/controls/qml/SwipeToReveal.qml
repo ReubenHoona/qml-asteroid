@@ -105,17 +105,16 @@ Item {
             Haptics.click()
     }
 
-    /*! Animate to an anchor: "covered", "revealing" or "revealed". */
-    function settle(target) {
+    /*! Animate to an anchor: "covered", "revealing" or "revealed"; velocity
+        (px/s, negative = to the left) is the finger's when it lets go. */
+    function settle(target, velocity) {
         var to = target === "revealed" ? -width : target === "revealing" ? -revealingOffset : 0
         if (target !== "covered" && state_ !== target)
             _haptic()
         if (target !== "covered")
             _coverOthers()
         state_ = target
-        _anim.stop()
-        _anim.to = to
-        _anim.restart()
+        _anim.animateTo(to, velocity === undefined ? NaN : velocity)
     }
     /*! Cover at once (another card opened, the list changed). */
     function reset() {
@@ -134,13 +133,15 @@ Item {
         }
     }
 
-    NumberAnimation {
+    /* the settle: AnchoredDraggable's default spring, 1.0/1500 (motion E12; no override was
+     * found in SysUI), from the speed the finger let go at */
+    WearSpring {
         id: _anim
         target: swipe
         property: "offset"
-        duration: Motion.springDuration(Motion.standard.defaultSpatial.stiffness)
-        easing.type: Easing.BezierSpline
-        easing.bezierCurve: Motion.springEasing
+        stiffness: 1500
+        dampingRatio: 1.0
+        visibilityThreshold: 0.5
         onFinished: if (swipe.state_ === "revealed") swipe.primaryAction()
     }
 
@@ -319,6 +320,6 @@ Item {
         return distance >= revealingOffset / 2 ? "revealing" : "covered"
     }
     function release(distance, velocity) {
-        settle(decide(distance, velocity))
+        settle(decide(distance, velocity), velocity)
     }
 }
