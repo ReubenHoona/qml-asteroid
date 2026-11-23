@@ -242,12 +242,25 @@ QtObject {
         arcSmall:          [14, 16, 550,  90, 0.6, 1.4]
     })
 
+    /*
+     * The weight a role asks the installed static family for, where it is
+     * not the CP3A weight. Noto Sans has faces at 100 steps only, and Qt
+     * matches 550 upwards to SemiBold (600); stock's page and dialog titles
+     * (titleMedium, titleSmall 550 in Google Sans Flex) are narrower than
+     * either face, so these two take Medium (500): "Connectivity" in
+     * titleMedium is 194 px wide instead of 200 (stock 182). axes.wght keeps
+     * the CP3A weight for a variable font; drop this map with one (WO-R2).
+     */
+    readonly property var _staticWeight: ({ titleMedium: 500, titleSmall: 500 })
+
     /*! The names of the 21 type roles. */
     readonly property var typeRoles: Object.keys(_typeScale)
 
     /*!
         The type roles in pixels for the current density, font scale and
-        Bold text: \c{Theme.type.bodyLarge.pixelSize} and so on.
+        Bold text: \c{Theme.type.bodyLarge.pixelSize} and so on. \c weight
+        is what the role asks the installed family for, \c{axes.wght} the
+        CP3A weight (they differ for titleMedium and titleSmall).
     */
     readonly property var type: {
         var out = {}
@@ -256,10 +269,11 @@ QtObject {
         for (var name in _typeScale) {
             var r = _typeScale[name]
             var w = Math.min(1000, r[2] + adj)
+            var face = _staticWeight[name] !== undefined ? Math.min(1000, _staticWeight[name] + adj) : w
             out[name] = {
                 pixelSize: r[0] * k,
                 lineHeight: r[1] * k,
-                weight: w,
+                weight: face,
                 width: r[3],
                 roundness: 100,
                 opsz: r[0],
