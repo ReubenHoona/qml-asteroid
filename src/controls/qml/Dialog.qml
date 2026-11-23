@@ -49,7 +49,7 @@ import org.asteroid.controls
         past half the width or at 800 dp/s it slides off (past p 0.7 it runs
         to the right edge), else it comes back, both in 200 ms on
         LinearOutSlowIn (0, 0, 0.2, 1); \l dismissRequested() follows the
-        slide;
+        slide, and a dialog that stays shown after it comes back at rest;
     \li Reduce animations makes every spring land at once (WearSpring).
     \endlist
 
@@ -120,10 +120,12 @@ Item {
     function open() {
         if (_shown)
             return
+        // a swipe left from the last showing (kept, or opened again while
+        // it fades out) ends: the dialog comes back at rest
+        _endSwipe()
         if (!active) {
             _alpha.snapTo(0)
             _scale.snapTo(enterScale)
-            _endSwipe()
         }
         _shown = true
         _alpha.stiffness = alphaInStiffness
@@ -215,6 +217,14 @@ Item {
                 dialog.dismissRequested()
                 if (dialog.closeOnSwipe)
                     dialog.close()
+                // kept (closeOnSwipe false and the owner did not close it):
+                // stock's box snaps back to rest once dismissed, so the
+                // dialog comes back on screen and behind to its 0.85
+                if (dialog._shown) {
+                    dialog._endSwipe()
+                    if (_behind.target)
+                        _behind.snapTo(dialog.behindScale)
+                }
             } else {
                 dialog._endSwipe()
             }
