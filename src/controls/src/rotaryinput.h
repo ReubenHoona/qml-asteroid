@@ -14,11 +14,14 @@
 #include <QTimer>
 #include <QList>
 #include <QPair>
+#include <QtQml/qqmlregistration.h>
 
 class QQuickItem;
 class QQuickWindow;
 class QWheelEvent;
 class MDConfItem;
+class QQmlEngine;
+class QJSEngine;
 
 /*
  * RotaryInput: the crown scrolls whatever the user is looking at, as on
@@ -46,7 +49,9 @@ class MDConfItem;
  *  - snapping views (PathView pickers, ListViews that snap or strictly
  *    enforce a highlight range) step item by item with Haptics.scrollFocus.
  *  - a curved position indicator at the right edge (PositionIndicator.qml)
- *    shows where a free view is while the crown or a finger scrolls it.
+ *    shows where a free view is while the crown or a finger scrolls it,
+ *    and for 2 s when QML calls RotaryInput.flashIndicator(view) as a list
+ *    screen opens (the launcher's panels, which no touch or crown opens).
  *  - rotary overscroll exit (stock SysUI ScrollAccumulator): a view or an
  *    ancestor that declares `signal rotaryExit(int direction)` gets it once
  *    the crown has pushed 150 px past an end (events under 120 ms apart,
@@ -84,11 +89,28 @@ class QAbstractAnimation;
 class RotaryInput : public QObject
 {
     Q_OBJECT
+    QML_NAMED_ELEMENT(RotaryInput)
+    QML_SINGLETON
+    Q_MOC_INCLUDE(<QQuickItem>)
 
 public:
     enum Kind { None, Free, Snap, Path, Exit };
 
     static void install();
+    static RotaryInput *instance();
+    static RotaryInput *create(QQmlEngine *qmlEngine, QJSEngine *jsEngine);
+
+    /* Show the position indicator on `flickable` now and hide it 2 s later,
+     * as stock does when a list screen opens: its indicator shows while the
+     * screen stage is not Idle, and a new screen is New for 2 s
+     * (ScreenScaffoldKt$$ExternalSyntheticLambda5.java:24,
+     * ScreenContent$UpdateIdlingDetectorIfNeeded$2$1.java:45). Only for a
+     * visible Flickable that scrolls vertically (contentHeight + topMargin
+     * + bottomMargin > height + 1) while the indicator is on
+     * (/org/asteroidos/ux/position-indicator); returns true when shown.
+     * In an Application the view also goes to the time text (ScrollAway)
+     * as a new screen. */
+    Q_INVOKABLE bool flashIndicator(QQuickItem *flickable);
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -116,7 +138,7 @@ private:
     bool gliding() const;
     void startGlide();
     friend class RotaryFrames;
-    void showIndicator(QQuickItem *flickable, bool flash);
+    bool showIndicator(QQuickItem *flickable, bool flash);
     bool ensureIndicator(QQuickWindow *window, QQuickItem *anyItem);
     void prepareIndicator(QQuickWindow *window);
     void readSettings();

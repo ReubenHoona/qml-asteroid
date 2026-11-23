@@ -125,13 +125,29 @@ private:
     RotaryInput *m_rotary;
 };
 
-void RotaryInput::install()
+RotaryInput *RotaryInput::instance()
 {
     static RotaryInput *s = nullptr;
-    if (s || !qApp)
-        return;
-    s = new RotaryInput(qApp);
-    qApp->installEventFilter(s);
+    if (!s && qApp) {
+        s = new RotaryInput(qApp);
+        qApp->installEventFilter(s);
+    }
+    return s;
+}
+
+void RotaryInput::install()
+{
+    instance();
+}
+
+/* The QML singleton is the one event filter */
+RotaryInput *RotaryInput::create(QQmlEngine *qmlEngine, QJSEngine *jsEngine)
+{
+    Q_UNUSED(qmlEngine)
+    Q_UNUSED(jsEngine)
+    RotaryInput *r = instance();
+    QJSEngine::setObjectOwnership(r, QJSEngine::CppOwnership);
+    return r;
 }
 
 RotaryInput::RotaryInput(QObject *parent) : QObject(parent),
@@ -961,12 +977,23 @@ bool RotaryInput::ensureIndicator(QQuickWindow *window, QQuickItem *anyItem)
     return true;
 }
 
-void RotaryInput::showIndicator(QQuickItem *flickable, bool flash)
+bool RotaryInput::showIndicator(QQuickItem *flickable, bool flash)
 {
     QQuickWindow *window = flickable->window();
     if (!window || !ensureIndicator(window, flickable))
-        return;
+        return false;
     m_indicator->setProperty("flickable", QVariant::fromValue<QObject *>(flickable));
     if (flash)
         QMetaObject::invokeMethod(m_indicator, "flash");
+    return true;
+}
+
+/* A list screen opens (stock: the screen stage is New for 2 s and the
+ * indicator shows while the stage is not Idle) */
+bool RotaryInput::flashIndicator(QQuickItem *flickable)
+{
+    if (!m_indicatorOn || !flickable || !flickable->isVisible()
+            || !flickable->inherits("QQuickFlickable") || !scrollsVertically(flickable))
+        return false;
+    return showIndicator(flickable, true);
 }
