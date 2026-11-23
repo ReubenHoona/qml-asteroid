@@ -285,12 +285,11 @@ Item {
         }
         onFinished: {
             tracking = false
-            // stock's anchors (SwipeableV2State.computeTarget from Default): off
-            // rest, a fling of 800 dp/s right, or half the width at any velocity,
+            // stock's anchors (SwipeableV2State.computeTarget from Default): a
+            // fling of 800 dp/s right, or half the width at any velocity,
             // dismisses; else it goes back
             var vmin = 800 * Math.min(dialog.width, dialog.height) / 192
-            var dismiss = dialog._offset > 0
-                    && (velocity >= vmin || dialog._offset >= dialog.width / 2)
+            var dismiss = velocity >= vmin || dialog._offset >= dialog.width / 2
             dialog._squeeze = !dismiss
             _settle.to = dismiss ? dialog.width : 0
             _settle.restart()
