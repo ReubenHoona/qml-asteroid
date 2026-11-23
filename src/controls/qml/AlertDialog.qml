@@ -57,6 +57,27 @@ import org.asteroid.controls
         everything fits.
     \endlist
 
+    \c{buttons: "info"} is the stock info popup instead (Settings
+    DialogUtils.showPopup, DialogUtils.java:22-37: a View-based
+    WearAlertDialog with one string and only the positive button; its
+    simple layout wear_alertdialog_action_button_layout.xml and
+    WearAlertDialogViewController.java:108-152):
+    \list
+    \li no title: the one message (\l text, or \l title when \c text is
+        empty) in Title3 = titleMedium 16 sp (32 px) on an 18 sp (36 px)
+        line, first baseline 14 sp (28 px) below its top and the last 4 sp
+        (8 px) above its bottom, 0.025 em tracking, onSurface, centred
+        between the 5.21 % / 94.79 % guidelines with 16 dp (32 px) padding
+        at each side (x 52 to 332), 8 dp (16 px) above it;
+    \li one round button: 52 dp (104 px) circle in primary with a 26 dp
+        (52 px) check in onPrimary, centred, "OK" for the screen reader;
+    \li padding: top 12.48 % of the height (47 px), bottom 6.24 % (23 px):
+        the button sits at the bottom (y 257 to 361) and the message is
+        centred between the top padding and the button; content that does
+        not fit scrolls with the button right under the message and a
+        20.83 % (79 px) bottom padding.
+    \endlist
+
     The buttons are named "Confirm" and "Dismiss" for the screen reader
     (wear_m3c_alert_dialog_content_description_confirm_button / _dismiss_).
     Alert dialogs never hold the screen on.
@@ -83,7 +104,7 @@ Dialog {
     property string iconName: ""
     /*! A component for the icon slot, instead of \l iconName. */
     property Component icon: null
-    /*! "confirmDismiss" (two icon buttons), "edge" (one edge button) or "none". */
+    /*! "confirmDismiss" (two icon buttons), "edge" (one edge button), "info" (the stock info popup: the message alone and one round check) or "none". */
     property string buttons: "confirmDismiss"
     /*! A label for the edge button; empty shows the check. */
     property string edgeText: ""
@@ -113,12 +134,18 @@ Dialog {
     readonly property bool hasIcon: iconName !== "" || icon !== null
     readonly property real _h: height > 0 ? height : 384
     readonly property real _w: width > 0 ? width : 384
+    /*! The stock info popup layout (\c{buttons: "info"}). */
+    readonly property bool info: buttons === "info"
+    /*! The message drawn in the info style: the text, or the title when there is no text. */
+    readonly property string _message: info && text === "" ? title : text
 
     /* ---- stock layout in px (Compose ceilDp rounds the px up) ---- */
-    readonly property real topPadding: hasIcon ? Math.ceil(0.012 * _h) : Math.ceil(0.10 * _h)
+    readonly property real topPadding: info ? Math.floor(0.1248 * _h)
+                                      : hasIcon ? Math.ceil(0.012 * _h) : Math.ceil(0.10 * _h)
     readonly property real sidePadding: Math.ceil(0.052 * _w)
     readonly property real bottomPadding: buttons === "confirmDismiss" ? Math.ceil(0.10 * _h)
                                          : buttons === "edge" ? _edge.preferredHeight + Theme.size.edgeButtonBottomGap + edgeGap
+                                         : info ? (scrolling ? Math.floor(0.2083 * _h) : infoBottomPadding)
                                          : 0.3646 * _h
     /*! Gap above the edge button: 4 dp, 16 dp with no text and no rows. */
     readonly property real edgeGap: (text === "" && _rows.children.length === 0) ? Theme.dp(16) : Theme.dp(4)
@@ -136,20 +163,39 @@ Dialog {
     readonly property real confirmHeight: Theme.dp(54)
     readonly property real buttonIconSize: Theme.dp(28)
     readonly property real buttonGap: 0.03 * _w
+    /* the info popup (View px: getFraction() and the guidelines are whole px) */
+    /*! Info style: bottom padding while the content fits (6.24 %). */
+    readonly property real infoBottomPadding: Math.floor(0.0624 * _h)
+    /*! Info style: space above the message (wear_alertdialog_title_margin_top 8 dp). */
+    readonly property real infoTextTop: Theme.dp(8)
+    /*! Info style: message padding at each side of the guidelines (16 dp). */
+    readonly property real infoTextSidePadding: Theme.dp(16)
+    /*! Info style: first baseline below the message top, last above its bottom (14 sp, 4 sp). */
+    readonly property real infoFirstBaseline: 14 * Theme.density * Theme.fontScale
+    readonly property real infoLastBaseline: 4 * Theme.density * Theme.fontScale
+    /*! Info style: Title3 tracking, 0.025 em. */
+    readonly property real infoTracking: 0.025
+    /*! Info style: the round button (wear_chip_button_default_min_height 52 dp) and its check (26 dp). */
+    readonly property real infoButtonSize: Theme.dp(52)
+    readonly property real infoButtonIconSize: Theme.dp(26)
+    readonly property real _spacing: info ? 0 : itemSpacing
 
     /*! The content at its own size (rows unscaled), px. */
     readonly property real naturalHeight: {
-        var rows = [_iconRow, _titleRow, _textRow, _rowsRow, _buttonsRow]
+        var rows = [_iconRow, _titleRow, _textRow, _rowsRow, _buttonsRow, _infoRow]
         var h = 0, n = 0
         for (var i = 0; i < rows.length; i++)
             if (rows[i].innerHeight > 0) {
                 h += rows[i].innerHeight
                 n++
             }
-        return h + Math.max(0, n - 1) * itemSpacing
+        return h + Math.max(0, n - 1) * _spacing
     }
     /*! The content does not fit: it scrolls as a scaling list. */
-    readonly property bool scrolling: naturalHeight + topPadding + bottomPadding > _h + 0.5
+    readonly property bool scrolling: naturalHeight + topPadding + (info ? infoBottomPadding : bottomPadding) > _h + 0.5
+    // half the free height while it fits: above the content, and in the info
+    // style again between the message and the button (stock's packed chain)
+    readonly property real _freeHalf: scrolling ? 0 : Math.max(0, (_h - topPadding - bottomPadding - naturalHeight) / 2)
 
     // stock starts the list at item 0
     function _toStart() {
@@ -161,6 +207,7 @@ Dialog {
     readonly property alias confirmButton: _confirmBtn
     readonly property alias dismissButton: _dismissBtn
     readonly property alias edgeButton: _edge
+    readonly property alias infoButton: _infoBtn
     readonly property alias titleLabel: _title
     readonly property alias textLabel: _text
 
@@ -196,7 +243,7 @@ Dialog {
         anchors.fill: parent
         contentWidth: width
         contentHeight: _col.height
-        topMargin: alert.topPadding + (alert.scrolling ? 0 : Math.max(0, (alert._h - alert.topPadding - alert.bottomPadding - alert.naturalHeight) / 2))
+        topMargin: alert.topPadding + alert._freeHalf
         onTopMarginChanged: if (!alert.scrolling || !alert.shown) alert._toStart()
         bottomMargin: alert.bottomPadding
         interactive: alert.scrolling
@@ -207,7 +254,7 @@ Dialog {
             id: _col
             x: alert.sidePadding
             width: alert._w - 2 * alert.sidePadding
-            spacing: alert.itemSpacing
+            spacing: alert._spacing
 
             EdgeRow {
                 id: _iconRow
@@ -222,7 +269,7 @@ Dialog {
             }
             EdgeRow {
                 id: _titleRow
-                innerHeight: alert.title !== "" ? _title.height : 0
+                innerHeight: alert.title !== "" && !alert.info ? _title.height : 0
                 Label {
                     id: _title
                     x: alert.titleSidePadding - alert.sidePadding
@@ -238,17 +285,28 @@ Dialog {
             }
             EdgeRow {
                 id: _textRow
-                innerHeight: alert.text !== "" ? _text.height + alert.textTopSpacing : 0
+                innerHeight: alert._message !== "" ? _text.height + _text.y : 0
                 Label {
                     id: _text
-                    y: alert.textTopSpacing
-                    x: alert.textSidePadding
+                    y: alert.info ? alert.infoTextTop : alert.textTopSpacing
+                    x: alert.info ? alert.infoTextSidePadding : alert.textSidePadding
                     width: parent.width - 2 * x
-                    text: alert.text
-                    role: "bodyMedium"
-                    color: Theme.color.onBackground
+                    text: alert._message
+                    role: alert.info ? "titleMedium" : "bodyMedium"
+                    color: alert.info ? Theme.color.onSurface : Theme.color.onBackground
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
+                    // info: the View TextView's lines (first and last baseline
+                    // from the box edges, Title3 tracking; Qt gives the last
+                    // line its full font height); else Label's own Compose
+                    // line box
+                    font.letterSpacing: alert.info ? alert.infoTracking * Theme.type.titleMedium.pixelSize : Theme.type.bodyMedium.letterSpacing
+                    topPadding: alert.info ? alert.infoFirstBaseline - _textMetrics.ascent : (lineHeight - _textMetrics.height) / 2
+                    bottomPadding: alert.info ? alert.infoLastBaseline - _textMetrics.descent : 0
+                    FontMetrics {
+                        id: _textMetrics
+                        font: _text.font
+                    }
                 }
             }
             EdgeRow {
@@ -350,6 +408,47 @@ Dialog {
                         }
                     }
                     Item { width: Theme.dp(2); height: 1 }
+                }
+            }
+            // info: the rest of the free height, so the button sits at the bottom
+            Item {
+                width: _col.width
+                height: alert.info ? alert._freeHalf : 0
+                visible: alert.info
+            }
+            EdgeRow {
+                id: _infoRow
+                innerHeight: alert.info ? alert.infoButtonSize : 0
+                MouseArea {
+                    id: _infoBtn
+                    width: alert.infoButtonSize
+                    height: alert.infoButtonSize
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: alert.info
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("OK")
+                    Accessible.onPressAction: alert._confirm()
+                    onClicked: alert._confirm()
+                    Rectangle {
+                        id: _infoShape
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: Theme.color.primary
+                        Ripple {
+                            radius: _infoShape.radius
+                            color: Theme.color.onPrimary
+                            pressed: _infoBtn.pressed
+                            pressX: _infoBtn.mouseX
+                            pressY: _infoBtn.mouseY
+                        }
+                    }
+                    DialogGlyph {
+                        anchors.centerIn: parent
+                        width: alert.infoButtonIconSize
+                        height: width
+                        glyph: "check"
+                        color: Theme.color.onPrimary
+                    }
                 }
             }
         }
