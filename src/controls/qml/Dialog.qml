@@ -163,8 +163,10 @@ Item {
     readonly property real _squeezeX: Math.max(0, (1 - _swipeScale) * width / 2)
     readonly property real _surfaceX: _squeeze ? _squeezeX
                                                : _squeezeX + (width - _squeezeX) * Math.max(0, _p - 0.7) / 0.3
+    // behind follows the swipe only while the dialog is shown: once close()
+    // has sent it back to 1.0, neither the finger nor a settle snaps it again
     on_OffsetChanged: {
-        if (_swiping && _behind.target)
+        if (_swiping && _shown && _behind.target)
             _behind.snapTo(behindScale + (1 - behindScale) * _p)
     }
     function _endSwipe() {
