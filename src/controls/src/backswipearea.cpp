@@ -104,7 +104,7 @@ void BackSwipeArea::setArmed(bool a)
         return;
     m_armed = a;
     emit armedChanged();
-    if (!a)
+    if (!a || !m_thresholdHaptic)
         return;
     /* nothing when it flips back; at most once per 100 ms */
     if (!m_lastHaptic.isValid() || m_lastHaptic.elapsed() >= HAPTIC_INTERVAL_MS) {
@@ -145,6 +145,14 @@ void BackSwipeArea::setSwipeEnabled(bool e)
     if (!e && !m_active)
         m_tracking = false;
     emit swipeEnabledChanged();
+}
+
+void BackSwipeArea::setThresholdHaptic(bool h)
+{
+    if (h == m_thresholdHaptic)
+        return;
+    m_thresholdHaptic = h;
+    emit thresholdHapticChanged();
 }
 
 void BackSwipeArea::reset()

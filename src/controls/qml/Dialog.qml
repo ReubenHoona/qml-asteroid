@@ -51,6 +51,7 @@ import org.asteroid.controls
         right edge), else it comes back, both in 200 ms on
         LinearOutSlowIn (0, 0, 0.2, 1); \l dismissRequested() follows the
         slide, and a dialog that stays shown after it comes back at rest;
+        no haptic plays on the way (stock has none);
     \li Reduce animations makes every spring land at once (WearSpring).
     \endlist
 
@@ -249,6 +250,8 @@ Item {
         id: _swipe
         anchors.fill: parent
         swipeEnabled: dialog.swipeToDismiss && dialog._shown
+        // stock's swipe-to-dismiss box plays no threshold haptic
+        thresholdHaptic: false
 
         property bool tracking: false
         onStarted: {

@@ -31,12 +31,12 @@ class WearSpring;
  * damping 1, stock BackProgressAnimator). "armed" is stock's "will go back":
  * the swipe is past 0.33 of the width and the finger is not moving left;
  * it plays the threshold haptic (a click, at most once per 100 ms) when it
- * turns on. On release "finished" is emitted with "velocity" (px/s), and
- * "committed" holds stock's decision: 500 dp/s (1000 px/s) or more to the
- * right goes back, 500 dp/s or more to the left cancels, otherwise it goes
- * back past lerp(0.33, 0.10, v / 500 dp/s) of the width when the last move
- * was not leftward. The user animates to the end (value is writable) and
- * calls reset().
+ * turns on, unless thresholdHaptic is false. On release "finished" is
+ * emitted with "velocity" (px/s), and "committed" holds stock's decision:
+ * 500 dp/s (1000 px/s) or more to the right goes back, 500 dp/s or more to
+ * the left cancels, otherwise it goes back past lerp(0.33, 0.10,
+ * v / 500 dp/s) of the width when the last move was not leftward. The
+ * user animates to the end (value is writable) and calls reset().
  */
 class BackSwipeArea : public QQuickItem
 {
@@ -61,6 +61,9 @@ class BackSwipeArea : public QQuickItem
     /* Whether a swipe is taken at all (not "enabled", which would also
      * disable the children) */
     Q_PROPERTY(bool swipeEnabled READ swipeEnabled WRITE setSwipeEnabled NOTIFY swipeEnabledChanged)
+    /* Whether arming plays the threshold haptic (and emits thresholdCrossed):
+     * the back gesture does; stock's SwipeToDismissBox plays none (Dialog) */
+    Q_PROPERTY(bool thresholdHaptic READ thresholdHaptic WRITE setThresholdHaptic NOTIFY thresholdHapticChanged)
 
 public:
     explicit BackSwipeArea(QQuickItem *parent = nullptr);
@@ -86,6 +89,8 @@ public:
     void setEdgeOnly(bool e);
     bool swipeEnabled() const { return m_swipeEnabled; }
     void setSwipeEnabled(bool e);
+    bool thresholdHaptic() const { return m_thresholdHaptic; }
+    void setThresholdHaptic(bool h);
 
     /* Ends a gesture whose animation is done: value 0, not active */
     Q_INVOKABLE void reset();
@@ -100,6 +105,7 @@ signals:
     void velocityChanged();
     void edgeOnlyChanged();
     void swipeEnabledChanged();
+    void thresholdHapticChanged();
     void started();
     void finished();
     void armedChanged();
@@ -138,6 +144,7 @@ private:
     quint64 m_pressTime = 0;
     bool m_edgeOnly = false;
     bool m_swipeEnabled = true;
+    bool m_thresholdHaptic = true;
     QPointF m_start;
     qreal m_value = 0;
     qreal m_velocity = 0;
