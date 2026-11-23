@@ -26,7 +26,8 @@ import org.asteroid.utils
     \li Shown when it is attached to a view that can scroll (a screen opens:
         \l flickable set) and while the view moves, until 2 s after it stops
         (the screen stage is not Idle); fades with the stiffness 400 spring
-        (about 332 ms, ScreenScaffoldKt$$ExternalSyntheticLambda5.java:25).
+        (about 332 ms, ScreenScaffoldKt$$ExternalSyntheticLambda5.java:25),
+        each change from rest at the opacity it has.
     \li The thumb's position and length animate over 500 ms with (0, 0, 0, 1),
         from where they are on every change (ScrollIndicatorDefaults.java:10).
     \endlist
@@ -94,12 +95,23 @@ Item {
     opacity: 0
     visible: opacity > 0
     /* the fade runs on the stock spring itself, 1.0/400 (ScreenContent
-     * UpdateIdlingDetectorIfNeeded, motion D14): turned round mid-way, it
-     * keeps its speed */
+     * UpdateIdlingDetectorIfNeeded, motion D14); every change starts from
+     * rest at the opacity it has, so a fade turned round mid-way goes back
+     * at once (stock AnimatedIndicator: animate() from the current alpha
+     * with initial velocity 0, the last change cancelling the one before) */
+    readonly property bool _fadeIn: shown && _scrollable
+    property bool _fadeReady: false
+    on_FadeInChanged: if (_fadeReady) _fade.animateTo(_fadeIn ? 1 : 0, 0)
+    // from 0 once the spring is complete (stock's alpha starts at 0)
+    Component.onCompleted: {
+        _fadeReady = true
+        if (_fadeIn)
+            _fade.animateTo(1, 0)
+    }
     WearSpring {
+        id: _fade
         target: indicator
         property: "opacity"
-        to: indicator.shown && indicator._scrollable ? 1 : 0
         stiffness: 400
         dampingRatio: 1.0
     }
