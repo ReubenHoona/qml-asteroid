@@ -36,6 +36,10 @@ import org.asteroid.controls
         spline fling, a scroll to an item), as stock runs its rotary scroll
         inside ScrollableState.scroll, so isScrollInProgress holds
         (ScreenContent.java:68-83, RotaryScrollHandler$scrollToTarget$1.java:57).
+        The view's own fixup after a layout change is not a scroll: stock
+        re-measures its list outside scroll(), so the stage stays (the
+        content shrinking under a view at its end, a row hidden or removed,
+        a margin or the view's size changing, a pixel rounding).
         Idle 2 s after the last move ($UpdateIdlingDetectorIfNeeded$2$1.java:45);
         a new view starts New (also for an offset that changes before the
         view's own change is handled).
@@ -97,7 +101,7 @@ Item {
         // is set here, where the offset is already the new one
         var f = flickable as Flickable
         if (f && f === _stageView) {
-            if (f.contentY !== _contentY && _valid && !f.moving) {
+            if (f.contentY !== _contentY && _valid && !f.moving && !_isFixup(f, _contentY)) {
                 _idle.restart()
                 stage = 2
             }
@@ -149,6 +153,29 @@ Item {
         duration: Motion.duration(200)
         easing.type: Easing.BezierSpline
         easing.bezierCurve: Motion.easing.standard
+    }
+
+    /* A move of contentY without a finger that is the view's own fixup
+       after a layout change, not a scroll. A fixup puts the content back
+       inside the bounds the view now has, or rounds it to a whole pixel
+       (Flickable sets atYEnd and atYBeginning before contentYChanged):
+       - at the end, moved back: the end came up to the view (the content
+         shrank under a view at its end, or a bottom margin or the view's
+         size changed); a scroll going back leaves the end
+       - at the beginning, moved forward: the beginning moved (a top margin
+         that goes takes the view with it and leaves the offset as it was,
+         so the contentY seen last lags behind until the next change)
+       - by less than a pixel, onto a whole pixel: the fixup's rounding of a
+         fractional position (a crown glide stops anywhere) when the content
+         or a row changes; Flickable does it inside setContentHeight,
+         ListView in its layout pass, before contentHeightChanged */
+    function _isFixup(f, oldY) {
+        var y = f.contentY
+        if (f.atYEnd && y < oldY)
+            return true
+        if (f.atYBeginning && y > oldY)
+            return true
+        return Math.abs(y - oldY) < 1 && y === Math.round(y)
     }
 
     /*! Stock's per-frame rule, run when the offset or the stage changes. */
