@@ -52,6 +52,10 @@ class QJSEngine;
  *    shows where a free view is while the crown or a finger scrolls it,
  *    and for 2 s when QML calls RotaryInput.flashIndicator(view) as a list
  *    screen opens (the launcher's panels, which no touch or crown opens).
+ *    RotaryInput.systemIndicator (default false) draws it in the system
+ *    UI's style (white thumb, #4D4D4D track, 34 degrees); the launcher,
+ *    which hosts only system surfaces, sets it once at start. A view with
+ *    `property bool m3Indicator: true` keeps the app (M3) style.
  *  - rotary overscroll exit (stock SysUI ScrollAccumulator): a view or an
  *    ancestor that declares `signal rotaryExit(int direction)` gets it once
  *    the crown has pushed 150 px past an end (events under 120 ms apart,
@@ -92,6 +96,8 @@ class RotaryInput : public QObject
     QML_NAMED_ELEMENT(RotaryInput)
     QML_SINGLETON
     Q_MOC_INCLUDE(<QQuickItem>)
+    /* the position indicator in the system UI's style (N61-03) */
+    Q_PROPERTY(bool systemIndicator READ systemIndicator WRITE setSystemIndicator NOTIFY systemIndicatorChanged)
 
 public:
     enum Kind { None, Free, Snap, Path, Exit };
@@ -111,6 +117,12 @@ public:
      * In an Application the view also goes to the time text (ScrollAway)
      * as a new screen. */
     Q_INVOKABLE bool flashIndicator(QQuickItem *flickable);
+
+    bool systemIndicator() const { return m_systemIndicator; }
+    void setSystemIndicator(bool on);
+
+signals:
+    void systemIndicatorChanged();
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -209,6 +221,7 @@ private:
     qreal m_px = 3.5;
     qreal m_detent = 24;
     bool m_indicatorOn = true;
+    bool m_systemIndicator = false;
 
     QPointer<QObject> m_indicator;
     /* windows whose indicator is made (or about to be) ahead of use */

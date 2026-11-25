@@ -501,6 +501,11 @@ QtObject {
         /*! Scroll indicator thumb / track: tone 80 / tone 20 (ScrollIndicatorKt.java:269-273). */
         property color scrollThumb: "#C6C6C6"
         property color scrollTrack: "#303030"
+        /*! The system UI's scroll indicator (RotaryInput.systemIndicator: the
+            launcher's lists, stream and quick settings; Wear OS 6 emulator
+            S04-b, S05, S07, S11): thumb #FFFFFF, track #4D4D4D. */
+        property color scrollThumbSystem: "#FFFFFF"
+        property color scrollTrackSystem: "#4D4D4D"
         /*! Slider track on a surface: black 30 % over surfaceContainer (SliderTokens). */
         property color sliderTrackOnSurface: "#212226"
         /*! The quick settings battery button while Battery Saver is on. */
@@ -867,6 +872,9 @@ QtObject {
         readonly property real scrollIndicatorGap: theme.dp(3)
         readonly property real scrollThumbMin: 0.3
         readonly property real scrollThumbMax: 0.7
+        // the system UI's indicator: 34 degrees of the track, caps included
+        // (Wear OS 6 emulator S05, S11: -17 to +17 degrees at radius 183)
+        readonly property real scrollIndicatorSweepSystem: 34
 
         // Page indicator (PageIndicator.kt)
         readonly property real pageDot: theme.dp(6)

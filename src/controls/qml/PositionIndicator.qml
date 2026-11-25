@@ -23,6 +23,14 @@ import org.asteroid.utils
     \li Thumb onBackground tone 80 (#c6c6c6), track tone 20 (#303030),
         round caps; the track is drawn as two pieces that stop 3 dp short of
         each end of the thumb (ScrollIndicatorKt.java:269-273,335).
+    \li The system UI's style when \c{RotaryInput.systemIndicator} is set
+        (the launcher sets it: app list, grid, Recents, stream, quick
+        settings): thumb #FFFFFF, track #4D4D4D, 34 degrees of the track,
+        the same 10 px stroke, edge gap and 3 dp gaps (Wear OS 6 emulator
+        S05, S07, S11: -17 to +17 degrees at radius 183). A view with
+        \c{property bool m3Indicator: true} keeps the app style (the tile
+        picker, S14-d). \l thumbColor, \l trackColor and \l sweepDegrees
+        follow these unless set.
     \li Shown when it is attached to a view that can scroll (a screen opens:
         \l flickable set) and while the view moves, until 2 s after it stops
         (the screen stage is not Idle); fades with the stiffness 400 spring
@@ -52,6 +60,19 @@ Item {
     property Item flickable: null
     /*! True while the indicator is (fading) in */
     property bool shown: false
+    /*! The system UI's style: RotaryInput.systemIndicator, unless the view
+        asks for the app style (\c{m3Indicator: true}) */
+    readonly property bool systemStyle: RotaryInput.systemIndicator && !(_asked && _asked.m3Indicator === true)
+    // the view as an untyped value: m3Indicator is the view's own property
+    readonly property var _asked: flickable
+    /*! The thumb: #FFFFFF in the system style, else Theme.color.scrollThumb (#C6C6C6) */
+    property color thumbColor: systemStyle ? Theme.color.scrollThumbSystem : Theme.color.scrollThumb
+    /*! The track: #4D4D4D in the system style, else Theme.color.scrollTrack (#303030) */
+    property color trackColor: systemStyle ? Theme.color.scrollTrackSystem : Theme.color.scrollTrack
+    /*! The track's length in degrees, caps included: 34 in the system
+        style, else 50 dp along the track (about 31 degrees on 384 px) */
+    property real sweepDegrees: systemStyle ? Theme.size.scrollIndicatorSweepSystem
+        : (_radius > 0 ? Theme.size.scrollIndicatorLength / _radius * 180 / Math.PI : 0)
 
     anchors.fill: parent
     enabled: false
@@ -138,7 +159,8 @@ Item {
 
     readonly property real _thickness: Theme.size.scrollIndicatorWidth
     readonly property real _radius: Math.min(width, height) / 2 - Theme.size.scrollIndicatorEdgeGap - _thickness / 2
-    readonly property real _length: Theme.size.scrollIndicatorLength
+    // the track's length along its radius: track radius x sweep
+    readonly property real _length: Math.max(0, _radius * sweepDegrees * Math.PI / 180)
     /*! Gap between the thumb and each track piece: 3 dp. */
     readonly property real gap: Theme.size.scrollIndicatorGap
 
@@ -158,7 +180,7 @@ Item {
         id: arc
         property real from: 0
         property real to: 0
-        property color color: Theme.color.scrollThumb
+        property color color: indicator.thumbColor
         readonly property int count: Math.max(2, Math.ceil(indicator._length / (indicator._thickness * 1.2)))
         readonly property real span: Math.max(0, to - from - indicator._thickness)
         anchors.fill: parent
@@ -186,18 +208,18 @@ Item {
         id: trackBefore
         from: -indicator._length / 2
         to: indicator.thumbStart - indicator.gap
-        color: Theme.color.scrollTrack
+        color: indicator.trackColor
     }
     Arc {
         id: trackAfter
         from: indicator.thumbEnd + indicator.gap
         to: indicator._length / 2
-        color: Theme.color.scrollTrack
+        color: indicator.trackColor
     }
     Arc {
         id: thumb
         from: indicator.thumbStart
         to: indicator.thumbEnd
-        color: Theme.color.scrollThumb
+        color: indicator.thumbColor
     }
 }

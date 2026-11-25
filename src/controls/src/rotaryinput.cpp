@@ -988,6 +988,14 @@ bool RotaryInput::showIndicator(QQuickItem *flickable, bool flash)
     return true;
 }
 
+void RotaryInput::setSystemIndicator(bool on)
+{
+    if (on == m_systemIndicator)
+        return;
+    m_systemIndicator = on;
+    emit systemIndicatorChanged();
+}
+
 /* A list screen opens (stock: the screen stage is New for 2 s and the
  * indicator shows while the stage is not Idle) */
 bool RotaryInput::flashIndicator(QQuickItem *flickable)
