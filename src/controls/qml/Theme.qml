@@ -518,6 +518,9 @@ QtObject {
             OS 6 emulator S24: #202124 and tertiary #D4C7FF). */
         property color sliderTrack: "#202124"
         property color sliderFill: tertiary
+        /*! SwipeToReveal's expressive pill and disc (the Wear OS 6 emulator
+            S34, S34-b: #343B4D). */
+        property color swipeRevealContainer: "#343B4D"
         /*! The quick settings battery button while Battery Saver is on. */
         property color batterySaver: "#FEE170"
         /*! Phone call buttons and their glyphs (Phone 164.0; calls E09). A

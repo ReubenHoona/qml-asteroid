@@ -23,7 +23,7 @@ import org.asteroid.controls
     \qmltype SwipeToReveal
     \inqmlmodule org.asteroid.controls
 
-    \brief Swipe a card to the left to reveal its actions (E23 of the
+    \brief Swipe a card to the side to reveal its actions (E23 of the
     notification stream: Wear OS Material 3 SwipeToReveal).
 
     Stock (notif-stream-03): right-to-left only, with a partial reveal.
@@ -48,9 +48,36 @@ import org.asteroid.controls
         not dismissible, or the screen reader is on).
     \endlist
 
+    Two options take the Wear OS 6 emulator's stream (S34, S34-b, M10, V10);
+    both are off by default, so a list that does not set them (the Timer's)
+    keeps the CP3A behaviour and look:
+    \list
+    \li \l bidirectional: a covered card follows the finger both ways after
+        the slop, the offset in [-width, +width]. The anchors and \l decide
+        are mirrored by the side (|offset| for the thresholds, the fling
+        towards that side), and the actions sit on the side the card leaves.
+        The left 15 % edge exclusion stays.
+    \li \l expressiveLook: the pill \c{Theme.color.swipeRevealContainer}
+        #343B4D, its outer edge on the card's rest edge, 2 dp from the
+        card (|offset| - 4 px wide) and the card's height less 4 px; a 24 dp
+        close glyph in onPrimaryContainer #D9E0F7, fading in as the pill
+        grows from 24 to 40 dp (V10: none at 42 px, 38 % at 62 px, full at
+        80 px); \l primaryText in titleMedium (16 sp) at onPrimaryContainer
+        80 %, fading in from 75 % to 100 % of the card's width, the two
+        centred as a group with 8 dp between them; the secondary button a
+        #343B4D 52 dp disc with an onPrimaryContainer gear on the pill's
+        inner side. The card is clipped to its rest bounds, a plain
+        rectangle (S34: square at the bottom corner; the round top corner
+        there is the screen's edge).
+    \endlist
+    Thresholds, the partial anchor, haptics, the edge exclusion and the
+    1500 / 1.0 settle spring stay CP3A in both.
+
     \qml
     SwipeToReveal {
         width: parent.width; height: card.height
+        bidirectional: true
+        expressiveLook: true
         onPrimaryAction: model.remove()
         onSecondaryAction: blockingMenu.open()
         NotificationCard { id: card; width: parent.width }
@@ -66,8 +93,12 @@ Item {
     property bool swipeEnabled: true
     /*! A secondary (settings) action is shown. */
     property bool hasSecondaryAction: true
+    /*! The card follows the finger both ways (the Wear OS 6 stream). */
+    property bool bidirectional: false
+    /*! The Wear OS 6 emulator's pill (see above). */
+    property bool expressiveLook: false
     property string primaryText: qsTr("Clear")
-    property string primaryIcon: "ios-close"
+    property string primaryIcon: expressiveLook ? "ms-close" : "ios-close"
     property string secondaryIcon: "ios-settings"
 
     /*! Full reveal or a tap on the primary pill. */
@@ -81,17 +112,24 @@ Item {
     readonly property real revealingOffset: Theme.dp(130) * width / Theme.dp(192)
     /*! Past this (px) a release goes to the full reveal: 0.75 x 192 dp - 10 dp. */
     readonly property real fullThreshold: 0.75 * Theme.dp(192) - Theme.dp(10)
-    /*! A fling faster than this (px/s, to the left) goes to the full reveal: 800 dp/s. */
+    /*! A fling faster than this (px/s, towards the side) goes to the full reveal: 800 dp/s. */
     readonly property real flingVelocity: Theme.dp(800)
     /*! Touches starting in this left part of the screen are ignored while covered: 15 %. */
     readonly property real edgeExclusion: 0.15 * _screenWidth
     readonly property real touchSlop: Theme.dp(8)
 
-    /*! The card's offset (px, 0 or negative). */
+    /*! The card's offset (px): negative to the left; positive to the right
+        with \l bidirectional. */
     property real offset: 0
     /*! "covered", "revealing" or "revealed". */
     property string state_: "covered"
     readonly property bool dragging: _area.tracking
+    /*! The side the card went to: -1 left (the actions at the right), 1
+        right (the actions at the left), 0 covered. */
+    readonly property int side: offset > 0 ? 1 : offset < 0 ? -1 : 0
+
+    /*! The expressive pill's colour (#343B4D). */
+    readonly property color _pillColor: Theme.color.swipeRevealContainer
 
     property real _lastHaptic: -1e9
     function _haptic() {
@@ -105,10 +143,16 @@ Item {
             Haptics.click()
     }
 
-    /*! Animate to an anchor: "covered", "revealing" or "revealed"; velocity
-        (px/s, negative = to the left) is the finger's when it lets go. */
+    // the side a settle goes to: where the card is, else the last side (left at first)
+    property int _lastSide: -1
+    onSideChanged: if (side !== 0) _lastSide = side
+
+    /*! Animate to an anchor: "covered", "revealing" or "revealed", on the
+        card's side; velocity (px/s, negative = to the left) is the finger's
+        when it lets go. */
     function settle(target, velocity) {
-        var to = target === "revealed" ? -width : target === "revealing" ? -revealingOffset : 0
+        var s = side !== 0 ? side : _lastSide
+        var to = target === "revealed" ? s * width : target === "revealing" ? s * revealingOffset : 0
         if (target !== "covered" && state_ !== target)
             _haptic()
         if (target !== "covered")
@@ -147,41 +191,42 @@ Item {
 
     clip: true
 
-    // the revealed actions, in the space the card leaves at the right
+    // the revealed actions, in the space the card leaves
     Item {
         id: _actions
-        // the swipe runs right to left in every language (as the back swipe is not mirrored): the
+        // the swipe keeps its physical sides in every language (as the back swipe is not mirrored): the
         // actions behind the card keep their physical places
         LayoutMirroring.enabled: false
         LayoutMirroring.childrenInherit: true
-        anchors {
-            right: parent.right
-            top: parent.top
-            bottom: parent.bottom
-        }
-        width: -swipe.offset
+        // the card went right: the actions at the left
+        readonly property bool _left: swipe.offset > 0
+        x: _left ? 0 : parent.width - width
+        height: parent.height
+        width: Math.abs(swipe.offset)
         visible: width > 0
-        readonly property bool _full: -swipe.offset > swipe.revealingOffset + Theme.dp(4)
-        readonly property real _gap: Theme.dp(4)
+        readonly property bool _full: Math.abs(swipe.offset) > swipe.revealingOffset + Theme.dp(4)
+        // CP3A: 4 dp around the pill; expressive: the pill on the card's rest
+        // edge and 2 dp from the card
+        readonly property real _gap: swipe.expressiveLook ? Theme.dp(2) : Theme.dp(4)
+        readonly property real _outer: swipe.expressiveLook ? 0 : _gap
 
         MouseArea {
             id: _secondary
+            objectName: "swipeRevealSecondary"
             readonly property real size: Math.min(Theme.size.iconButton, swipe.height)
             visible: swipe.hasSecondaryAction
             opacity: _actions._full ? 0 : 1
             width: visible ? size : 0
             height: size
-            anchors {
-                left: parent.left
-                leftMargin: _actions._gap
-                verticalCenter: parent.verticalCenter
-            }
+            // on the inner side, next to the card
+            x: _actions._left ? _actions.width - _actions._gap - width : _actions._gap
+            anchors.verticalCenter: parent.verticalCenter
             enabled: swipe.state_ === "revealing"
             onClicked: { swipe.settle("covered"); swipe.secondaryAction() }
             Rectangle {
                 anchors.fill: parent
                 radius: width / 2
-                color: Theme.color.primaryContainer
+                color: swipe.expressiveLook ? swipe._pillColor : Theme.color.primaryContainer
                 Ripple { radius: parent.radius; color: Theme.color.onPrimaryContainer; pressed: _secondary.pressed; pressX: _secondary.mouseX; pressY: _secondary.mouseY }
             }
             Icon {
@@ -195,24 +240,28 @@ Item {
 
         MouseArea {
             id: _primary
-            anchors {
-                right: parent.right
-                rightMargin: _actions._gap
-                verticalCenter: parent.verticalCenter
-            }
+            objectName: "swipeRevealPill"
             width: Math.max(0, _actions._full || !swipe.hasSecondaryAction
-                               ? parent.width - 2 * _actions._gap
-                               : parent.width - _secondary.width - 3 * _actions._gap)
-            height: Math.min(Theme.dp(84), swipe.height)
+                               ? parent.width - _actions._outer - _actions._gap
+                               : parent.width - _secondary.width - _actions._outer - 2 * _actions._gap)
+            // on the outer side, at the card's rest edge
+            x: _actions._left ? _actions._outer : parent.width - _actions._outer - width
+            height: swipe.expressiveLook ? Math.max(0, swipe.height - Theme.dp(2)) : Math.min(Theme.dp(84), swipe.height)
+            anchors.verticalCenter: parent.verticalCenter
             enabled: swipe.state_ === "revealing"
             onClicked: swipe.settle("revealed")
             Rectangle {
                 anchors.fill: parent
-                radius: height / 2
-                color: Theme.color.primaryDim
-                Ripple { radius: parent.radius; color: Theme.color.onPrimary; pressed: _primary.pressed; pressX: _primary.mouseX; pressY: _primary.mouseY }
+                radius: Math.min(width, height) / 2
+                color: swipe.expressiveLook ? swipe._pillColor : Theme.color.primaryDim
+                Ripple {
+                    radius: parent.radius
+                    color: swipe.expressiveLook ? Theme.color.onPrimaryContainer : Theme.color.onPrimary
+                    pressed: _primary.pressed; pressX: _primary.mouseX; pressY: _primary.mouseY
+                }
             }
             Row {
+                visible: !swipe.expressiveLook
                 anchors.centerIn: parent
                 spacing: Theme.space.s
                 Icon {
@@ -228,6 +277,42 @@ Item {
                     color: Theme.color.onPrimary
                     visible: _primary.width > Theme.dp(80)
                     anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+            // the expressive pill's content: the glyph, then the label near a
+            // full swipe, centred as a group
+            Item {
+                id: _group
+                visible: swipe.expressiveLook
+                anchors.fill: parent
+                readonly property real spacing: Theme.dp(8)
+                /*! 0 -> 1 as the pill grows from 24 to 40 dp. */
+                readonly property real iconAlpha: Math.max(0, Math.min(1, (_primary.width - Theme.size.iconSmall) / Theme.dp(16)))
+                /*! 0 -> 1 from 75 % to 100 % of the card's width. */
+                readonly property real labelAlpha: swipe.width > 0
+                    ? Math.max(0, Math.min(1, (Math.abs(swipe.offset) / swipe.width - 0.75) / 0.25)) : 0
+                readonly property real groupWidth: _xIcon.width + labelAlpha * (spacing + _xLabel.implicitWidth)
+                Icon {
+                    id: _xIcon
+                    objectName: "swipeRevealIcon"
+                    x: (_group.width - _group.groupWidth) / 2
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.size.iconSmall
+                    height: width
+                    name: swipe.primaryIcon
+                    color: Theme.color.onPrimaryContainer
+                    opacity: _group.iconAlpha
+                }
+                Label {
+                    id: _xLabel
+                    objectName: "swipeRevealLabel"
+                    x: _xIcon.x + _xIcon.width + _group.spacing
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: swipe.primaryText
+                    role: "titleMedium"
+                    color: Qt.rgba(Theme.color.onPrimaryContainer.r, Theme.color.onPrimaryContainer.g, Theme.color.onPrimaryContainer.b, 0.8)
+                    opacity: _group.labelAlpha
+                    visible: opacity > 0
                 }
             }
         }
@@ -273,8 +358,10 @@ Item {
             if (!tracking) {
                 if (Math.abs(dx) < swipe.touchSlop && Math.abs(dy) < swipe.touchSlop)
                     return
-                if (Math.abs(dx) <= Math.abs(dy) || (dx > 0 && swipe.state_ === "covered"))
-                    return   // vertical: the list scrolls; rightwards: the back swipe
+                // vertical: the list scrolls; rightwards on a covered card: the
+                // back swipe (unless the card goes both ways)
+                if (Math.abs(dx) <= Math.abs(dy) || (dx > 0 && swipe.state_ === "covered" && !swipe.bidirectional))
+                    return
                 tracking = true
                 preventStealing = true
             }
@@ -282,8 +369,8 @@ Item {
             if (now > lastT)
                 velocity = 0.6 * velocity + 0.4 * (p.x - lastX) * 1000 / (now - lastT)
             lastX = p.x; lastT = now
-            swipe.offset = Math.max(-swipe.width, Math.min(0, startOffset + dx))
-            if (-swipe.offset >= swipe.revealingOffset && swipe.state_ === "covered") {
+            swipe.offset = Math.max(-swipe.width, Math.min(swipe.bidirectional ? swipe.width : 0, startOffset + dx))
+            if (Math.abs(swipe.offset) >= swipe.revealingOffset && swipe.state_ === "covered") {
                 swipe.state_ = "revealing"
                 swipe._coverOthers()
                 swipe._haptic()
@@ -298,28 +385,35 @@ Item {
                 return
             }
             tracking = false
-            swipe.release(-swipe.offset, velocity)
+            swipe._release(velocity)
         }
         onClicked: (mouse) => { mouse.accepted = swipe.state_ !== "covered" }
         onCanceled: {
             preventStealing = false
             if (tracking) {
                 tracking = false
-                swipe.release(-swipe.offset, 0)
+                swipe._release(0)
             }
         }
     }
 
     /*!
-        Stock's decision for a swipe of \a distance px (to the left) released
-        at \a velocity px/s (negative = to the left).
+        Stock's decision for a swipe of \a distance px (towards the card's
+        side) released at \a velocity px/s (negative = towards that side).
     */
     function decide(distance, velocity) {
         if (distance >= fullThreshold || velocity <= -flingVelocity)
             return "revealed"
         return distance >= revealingOffset / 2 ? "revealing" : "covered"
     }
+    /*! A release \a distance px to the left at \a velocity px/s (negative =
+        to the left). */
     function release(distance, velocity) {
         settle(decide(distance, velocity), velocity)
+    }
+    // a release where the card is, mirrored by its side; velocity in px/s (negative = left)
+    function _release(velocity) {
+        var s = side !== 0 ? side : -1
+        settle(decide(Math.abs(offset), -s * velocity), velocity)
     }
 }
