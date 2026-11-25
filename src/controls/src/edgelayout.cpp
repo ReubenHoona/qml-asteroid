@@ -167,7 +167,7 @@ qreal EdgeLayout::ceilHeight(qreal h, qreal scale)
 
 QVector<EdgePlace> EdgeLayout::layout(const QVector<const EdgeSpec *> &specs, const QVector<qreal> &tops,
                                       const QVector<qreal> &hs, const QVector<qreal> &gaps, qreal vh,
-                                      bool reduced, int *anchor, bool innerAnchor)
+                                      bool reduced, int *anchor)
 {
     const int n = tops.size();
     QVector<EdgePlace> out(n);
@@ -205,11 +205,7 @@ QVector<EdgePlace> EdgeLayout::layout(const QVector<const EdgeSpec *> &specs, co
     }
     if (anchor)
         *anchor = a;
-    const EdgeValues ea = eval1(a, tops[a], hs[a]);
-    if (innerAnchor && tops[a] + hs[a] / 2 < vh / 2)
-        out[a] = placed(tops[a] + hs[a] - ceilHeight(hs[a], ea.scale), hs[a], ea, -1);
-    else
-        out[a] = placed(tops[a], hs[a], ea, 0);
+    out[a] = placed(tops[a], hs[a], eval1(a, tops[a], hs[a]), 0);
     // downwards from the anchor's bottom
     qreal bottom = out[a].y + out[a].height;
     for (int k = a + 1; k < n; k++) {
@@ -460,7 +456,7 @@ void EdgePacker::doLayout()
         gaps[i] = i + 1 < n ? rows[i + 1].top - (rows[i].top + rows[i].height) : 0;
         specs[i] = &rows[i].effect->m_spec;
     }
-    const QVector<EdgePlace> places = EdgeLayout::layout(specs, tops, hs, gaps, vh, reduced, nullptr, true);
+    const QVector<EdgePlace> places = EdgeLayout::layout(specs, tops, hs, gaps, vh, reduced);
     for (int i = 0; i < n && i < places.size(); i++) {
         const Row &r = rows[i];
         const EdgePlace &p = places[i];

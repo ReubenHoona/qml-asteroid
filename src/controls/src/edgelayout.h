@@ -133,22 +133,23 @@ public:
     static qreal value(qreal l, const EdgeSpec::Variable &v, const qreal e[4]);
     static EdgeValues evaluate(const EdgeSpec &spec, qreal top, qreal h, bool reduced);
     static qreal ceilHeight(qreal h, qreal scale);
-    /* one spec per item (specs[i]); returns the anchor in *anchor.
-     * innerAnchor: an anchor above the middle scales about its bottom
-     * (side -1) instead of its top, so a list whose middle row is still
-     * shrinking (a short list, a lone header) keeps the inner edge too;
-     * WearEdge.js (innerAnchor false) always uses the top. */
+    /* one spec per item (specs[i]); returns the anchor in *anchor. The
+     * anchor (the item nearest the middle) stays where it is and scales
+     * about its top, as WearEdge.js and stock (TransformingLazyColumn lays
+     * an item out at ceil(s h) from its top) */
     static QVector<EdgePlace> layout(const QVector<const EdgeSpec *> &specs, const QVector<qreal> &tops,
                                      const QVector<qreal> &hs, const QVector<qreal> &gaps, qreal vh,
-                                     bool reduced, int *anchor = nullptr, bool innerAnchor = false);
+                                     bool reduced, int *anchor = nullptr);
 };
 
 /*
  * The packed layout of one Flickable's rows: every EdgeEffect in the
  * Flickable joins its packer; the ones with `packed: true` are laid out
  * together on every move (EdgeLayout::layout) and get their scale,
- * alphas, translateY and originY from it; every row, the middle one too,
- * scales about its edge nearest the centre. A packed effect sits out (at
+ * alphas, translateY and originY from it, the same numbers as
+ * EdgeLayout.layout() and WearEdge.js: the rows above the anchor scale
+ * about their bottom, the anchor and the rows below about their top. A
+ * packed effect sits out (at
  * rest) when its item, or an item it is inside, carries another
  * EdgeEffect: a ListItem given to a ScalingList as its itemDelegate, or a
  * ListHeader with an EdgeEffect of the page's own. An effect with

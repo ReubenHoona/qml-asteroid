@@ -49,13 +49,14 @@ class QQuickItem;
  * follow it from its bottom and the rows above from its top, each at its
  * transformed height and its natural gap, so shrunk rows stay 8 px apart
  * and the list still scrolls evenly at its natural length. Each row scales
- * about its edge nearest the centre (originY: its top in the lower half,
- * its bottom in the upper half; the rows below the middle row follow its
- * bottom, the rows above it its top) and moves by translateY; scale and
- * alphas are the values at the place it is drawn (the Wear OS 6 emulator,
- * Settings S16-S22: a row bottom at y 74 is at 0.85 / 0.75, a row top at
- * y 347 at 0.75 / 0.58). `inset` is the part of the item above and below
- * the row that belongs to the gap (ListItem and ListRow keep 2 dp):
+ * about its edge nearest the centre (originY: the top for the row nearest
+ * the middle and the rows below it, the bottom for the rows above it; the
+ * same as WearEdge.js and EdgeLayout.layout()) and moves by translateY;
+ * scale and alphas are the values at the place it is drawn (the Wear OS 6
+ * emulator, Settings S16-S22: a row bottom at y 74 is at 0.85 / 0.75, a
+ * row top at y 347 at 0.75 / 0.58). `inset` is the part of the item
+ * above and below the row that belongs to the gap (ListItem and ListRow
+ * keep 2 dp):
  *
  *   Item { id: row
  *       EdgeEffect { id: edge; item: row; packed: true }
