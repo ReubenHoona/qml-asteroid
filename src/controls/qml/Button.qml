@@ -162,8 +162,42 @@ MouseArea {
     /*! Height of the visible container (CompactButton: 32 dp in a 48 dp touch area). */
     property real containerHeight: height
 
+    /*!
+        A button used as a row of a list next to packed rows (ListItem,
+        ListRow, InlineSlider: EdgeEffect, packed) shrinks and moves with
+        them when this is set: a packed EdgeEffect of its own, made only
+        then (off by default; inside a row with its own EdgeEffect it stays
+        at rest).
+    */
+    property bool edgeEffect: false
+    property EdgeEffect _edge: null
+    function _makeEdge() {
+        if (edgeEffect && !_edge)
+            _edge = _edgeComponent.createObject(button, { item: button })
+        if (_edge)
+            _edge.enabled = edgeEffect
+    }
+    onEdgeEffectChanged: _makeEdge()
+    Component.onCompleted: _makeEdge()
+    Component {
+        id: _edgeComponent
+        EdgeEffect { packed: true }
+    }
+    readonly property real _edgeScale: _edge ? _edge.scale : 1
+    readonly property real _edgeAlpha: _edge ? _edge.alpha : 1
+    transform: [
+        Scale {
+            origin.x: button.width / 2
+            origin.y: button._edge ? button._edge.originY : 0
+            xScale: button._edgeScale
+            yScale: button._edgeScale
+        },
+        Translate { y: button._edge ? button._edge.translateY : 0 }
+    ]
+
     Rectangle {
         id: _container
+        opacity: button._edgeAlpha
         anchors {
             left: parent.left
             right: parent.right
@@ -217,6 +251,7 @@ MouseArea {
 
     Row {
         id: _content
+        opacity: button._edgeAlpha
         anchors {
             left: button.centered ? undefined : parent.left
             leftMargin: button.horizontalPadding
@@ -271,6 +306,7 @@ MouseArea {
 
     Item {
         id: _trailing
+        opacity: button._edgeAlpha
         width: button.trailingWidth
         height: parent.height
         anchors {
