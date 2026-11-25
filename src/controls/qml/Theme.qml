@@ -878,6 +878,19 @@ QtObject {
 
         /*! TimeText sweep, degrees (TimeTextKt.java:130). */
         readonly property real timeTextSweep: 70
+        /*!
+            TimeText band from the screen edge: 3.5 dp, 4.5 dp in a Material 2
+            application. Stock pads 2 dp (TimeTextDefaults.java:16), but
+            Noto Sans draws its digits higher in the line than stock's font:
+            2 dp put our digit tops at y 12, the emulator's are at y 15 in
+            Settings (S16-S24) and y 16 in Clock, Contacts and Phone
+            (S27-S31). Rendered rows (brightest pixel of each row): 3.5 dp
+            gives 14: 37, 15: 198 as S20 (41, 198); in Material 2, 4 dp
+            gave 15: 122, 16: 255 and 4.5 dp gives 15: 0, 16: 122, 17: 255
+            as S27 (0, 209, 255). \l Application's \c timeTextMargin
+            starts here.
+        */
+        readonly property real timeTextEdgeMargin: theme.dp(theme.materialVersion === 2 ? 4.5 : 3.5)
         /*! Status icon disc at the top centre. */
         readonly property real statusIcon: theme.dp(18)
         /*! Watch face complication bulb: 86 dp circle, 8 dp ring, 61 degree gap. */

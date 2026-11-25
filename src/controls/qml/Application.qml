@@ -137,6 +137,15 @@ Application_p {
     */
     property bool showTime: _timeTextSetting.value
 
+    /*!
+        The distance of the time text from the screen edge in px:
+        \c{Theme.size.timeTextEdgeMargin} (3.5 dp; 4.5 dp in a Material 2
+        application) by default. An application whose stock screen has the
+        time higher or lower sets its own (Media Controls: 1 dp, digit top
+        y 10, S33).
+    */
+    property real timeTextMargin: Theme.size.timeTextEdgeMargin
+
     ConfigurationValue {
         id: _timeTextSetting
         key: "/org/asteroidos/ux/time-text"
@@ -161,6 +170,7 @@ Application_p {
     TimeText {
         id: _timeText
         visible: showTime
+        edgeMargin: _application.timeTextMargin
         z: 11
         opacity: _scrollAway.alpha
         transform: [

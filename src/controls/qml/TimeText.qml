@@ -32,9 +32,20 @@ import org.asteroid.utils
         "HH:mm" with the AM/PM marker removed: "1:05" in 12 hour mode;
     \li type arcMedium (15 sp, line 18 sp, weight 599, width 90, tracking
         0.6 sp), colour onBackground at tone 80 (\c{Theme.color.timeText});
-    \li 2 dp from the screen edge (letter centres 22 px from it on the
-        Pixel Watch 2), at most 70 degrees of the circle.
+    \li \c{Theme.size.timeTextEdgeMargin} from the screen edge, at most 70
+        degrees of the circle. Stock pads 2 dp, but Noto Sans puts the digits
+        higher than stock's font: the emulator's digit tops are at y 15 in
+        Settings (S16-S24, '6:47' x 160-224, y 15-38), so the band sits
+        3.5 dp from the edge (letter centres 25 px from it).
     \endlist
+
+    In a Material 2 application (\l{Theme}{Theme.materialVersion} 2), as
+    the emulator's Clock, Contacts and Phone (S27-S31, '7:00' x 159-224,
+    y 16-39): white (\c{Theme.color.timeText} #FFFFFF), lighter (the
+    stock '0' stroke is about 2.9 px instead of 4; weight 500, stock's
+    caption1 is Medium, draws 3.1 px here and 599 draws 3.7), the same
+    size, 4.5 dp from the edge (digit top y 16).
+    \l Application moves it with \c timeTextMargin.
 */
 Item {
     id: timeText
@@ -49,8 +60,10 @@ Item {
     property real pixelSize: Theme.type.arcMedium.pixelSize
     /*! The line (and band) height in pixels: arcMedium, 18 sp */
     property real lineHeight: Theme.type.arcMedium.lineHeight
-    /*! Distance of the band from the edge of the screen: 2 dp */
-    property real edgeMargin: Theme.space.xxs
+    /*! Distance of the band from the edge of the screen: 3.5 dp (4.5 dp in a Material 2 application) */
+    property real edgeMargin: Theme.size.timeTextEdgeMargin
+    /*! The letter weight: the role's (arcMedium 599), 500 in a Material 2 application */
+    property int weight: Theme.materialVersion === 2 ? Theme.weight(500) : _role.weight
     /*! The widest the text may be, in degrees of the circle: 70 */
     property real maxSweep: Theme.size.timeTextSweep
 
@@ -64,6 +77,8 @@ Item {
     }
 
     readonly property var _role: Theme.type.arcMedium
+    // the role's axes with this weight (a variable font reads wght)
+    readonly property var _axes: ({ "wght": weight, "wdth": _role.width, "ROND": _role.roundness, "opsz": _role.opsz })
     readonly property bool _round: DeviceSpecs.hasRoundScreen
     // the middle of the band and of the letters
     readonly property real _radius: Math.min(width, height) / 2 - edgeMargin - lineHeight / 2
@@ -73,7 +88,7 @@ Item {
     readonly property string _styleName: {
         var names = { 100: "Thin", 200: "ExtraLight", 300: "Light", 400: "", 500: "Medium",
                       600: "SemiBold", 700: "Bold", 800: "ExtraBold", 900: "Black" }
-        var w = Math.max(100, Math.min(900, Math.round(_role.weight / 100) * 100))
+        var w = Math.max(100, Math.min(900, Math.round(weight / 100) * 100))
         return ("SemiCondensed " + names[w]).trim()
     }
 
@@ -178,10 +193,10 @@ Item {
             color: timeText.color
             font.family: Theme.fontFamily
             font.pixelSize: timeText.pixelSize
-            font.weight: timeText._role.weight
+            font.weight: timeText.weight
             font.styleName: timeText._styleName
             font.letterSpacing: timeText._role.letterSpacing
-            font.variableAxes: timeText._role.axes
+            font.variableAxes: timeText._axes
             x: timeText.width / 2 + (timeText._round ? timeText._radius * Math.sin(angle) : along) - width / 2
             y: timeText._round
                ? timeText.height / 2 - timeText._radius * Math.cos(angle) - height / 2
@@ -200,10 +215,10 @@ Item {
         color: timeText.color
         font.family: Theme.fontFamily
         font.pixelSize: timeText.pixelSize
-        font.weight: timeText._role.weight
+        font.weight: timeText.weight
         font.styleName: timeText._styleName
         font.letterSpacing: timeText._role.letterSpacing
-        font.variableAxes: timeText._role.axes
+        font.variableAxes: timeText._axes
         x: timeText.width / 2 + (timeText._round ? timeText._radius * Math.sin(angle) : along) - width / 2
         y: timeText._round
            ? timeText.height / 2 - timeText._radius * Math.cos(angle) - height / 2
