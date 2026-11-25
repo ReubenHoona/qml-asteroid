@@ -60,7 +60,10 @@ import org.asteroid.controls
     second line and the icon take the content colour, as Wear Material 2's
     ChipDefaults (secondaryContentColor = iconColor = contentColor for
     every chip): a tonal row is white on #303133 (S31 'Favorites' and its
-    star, S29-b '7:02 PM' and 'One time').
+    star, S29-b '7:02 PM' and 'One time'). Its label is regular weight
+    (\l labelWeight 400), its icon 24 dp and the label 8 dp after it (S31
+    'Favorites', S32 'Open on phone': the icon box x 48-96, the text from
+    x 112-113, the same place as Material 3's 26 + 6 dp).
 
     \qml
     Button { variant: "tonal"; iconName: "ios-settings"; text: "Settings"; secondaryText: "On" }
@@ -86,10 +89,10 @@ MouseArea {
     property real horizontalPadding: Theme.space.xl
     /*! 6 dp top and bottom (ButtonDefaults.java:21). */
     property real verticalPadding: Theme.space.s
-    /*! Icon 26 dp (FilledButtonTokens.java:31-33). */
-    property real iconSize: Theme.size.icon
-    /*! 6 dp from the icon to the text. */
-    property real iconSpacing: Theme.space.s
+    /*! Icon 26 dp (FilledButtonTokens.java:31-33); 24 dp in Material 2. */
+    property real iconSize: _m2 ? Theme.size.iconSmall : Theme.size.icon
+    /*! 6 dp from the icon to the text; 8 dp in Material 2. */
+    property real iconSpacing: _m2 ? Theme.dp(8) : Theme.space.s
     /*! Minimum height 52 dp. */
     property real minimumHeight: Theme.size.button
     /*! Label lines: 3 with a second line, 5 without (controls-components-17). */
@@ -99,6 +102,8 @@ MouseArea {
     /*! Type roles of the two lines. */
     property string labelRole: "labelMedium"
     property string secondaryLabelRole: "labelSmall"
+    /*! The label's weight (Label.weight): 0, the role's; 400 in Material 2. */
+    property int labelWeight: _m2 ? 400 : 0
 
     readonly property bool _filled: variant === "filled"
     readonly property bool _tonal: variant === "tonal"
@@ -244,6 +249,7 @@ MouseArea {
                 visible: text !== ""
                 text: button.text
                 role: button.labelRole
+                weight: button.labelWeight
                 color: button.contentColor
                 wrapMode: Text.Wrap
                 maximumLineCount: button.maximumLineCount
