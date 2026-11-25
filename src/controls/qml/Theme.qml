@@ -46,6 +46,11 @@ import org.asteroid.controls
         Color theme: \c colorSource, \c colorPresets) replaces them live.
     \li \c{Theme.alpha.*}, \c{Theme.shape.*}, \c{Theme.space.*},
         \c{Theme.size.*}, \c{Theme.margin.*}.
+    \li \c{Theme.materialVersion}: 3, or 2 in an application that sets
+        \c{materialVersion: 2} on its \l Application (stock's Clock,
+        Contacts, Phone and Messages are Wear Material 2 apps): the colour
+        roles then come from the fixed \c{Theme.m2Palette}, never from the
+        Color theme.
     \endlist
 
     Dims stays for upstream and third-party applications.
@@ -199,6 +204,27 @@ QtObject {
         return { "x1": w / 2 - dx * half, "y1": h / 2 - dy * half, "x2": w / 2 + dx * half, "y2": h / 2 + dy * half }
     }
 
+    /* ---- Material version ---- */
+
+    /*!
+        The Wear Material generation the application is drawn in: 3 (Wear
+        Material 3, the default: the system screens, Settings, Media) or 2
+        (Wear Material 2). On Wear OS 6 (the emulator, BP2A.250605) Clock
+        (Stopwatch, Timer, Alarm), Contacts, Phone and Messages are still
+        Material 2 apps with fixed colours, not themed. \l Application
+        writes its own \c materialVersion here; each application is its own
+        process, so the choice stays local to it. Under 2:
+        \list
+        \li the colour roles are \l m2Roles (the \l m2Palette values) and
+            the Color theme is not applied;
+        \li \c{color.timeText} is #FFFFFF;
+        \li numeralSmall and numeralMedium are weight 400;
+        \li \l Button rows take the Material 2 chip colours and
+            \l StatusPage the Material 2 status text.
+        \endlist
+    */
+    property int materialVersion: 3
+
     /* ---- Typography ---- */
 
     /*!
@@ -253,22 +279,58 @@ QtObject {
      */
     readonly property var _staticWeight: ({ titleMedium: 500, titleSmall: 500 })
 
+    /*
+     * The roles whose weight differs in a Material 2 application
+     * (materialVersion 2): the emulator's Clock, Phone and Contacts draw
+     * their numerals in regular weight (S27, S28-c, S31-c: stroke about
+     * 5.5 px on a 42-45 px digit; at 599 the dialpad '0' stroke is about
+     * 7 px).
+     */
+    readonly property var _m2Weight: ({ numeralSmall: 400, numeralMedium: 400 })
+
+    /*
+     * The Wear Material 2 type scale (androidx.wear.compose.material
+     * Typography defaults) in sp: size, line height, weight, tracking. The
+     * width is 100. A Material 2 application's text uses these where the
+     * stock one does: its status text is body1 (S30: 23 px cap, 40 px line
+     * pitch).
+     */
+    readonly property var _m2TypeScale: ({
+        display1: [40, 46, 500, 0.5],
+        display2: [34, 40, 500, 1.0],
+        display3: [30, 36, 500, 0.8],
+        title1:   [24, 28, 500, 0.2],
+        title2:   [20, 24, 500, 0.2],
+        title3:   [16, 20, 500, 0.2],
+        body1:    [16, 20, 400, 0.18],
+        body2:    [14, 18, 400, 0.2],
+        button:   [15, 19, 700, 0.38],
+        caption1: [14, 18, 500, 0.1],
+        caption2: [12, 16, 500, 0.1],
+        caption3: [10, 14, 500, 0.1]
+    })
+
     /*! The names of the 21 type roles. */
     readonly property var typeRoles: Object.keys(_typeScale)
+    /*! The names of the 12 Wear Material 2 type roles (display1 ... caption3). */
+    readonly property var m2TypeRoles: Object.keys(_m2TypeScale)
 
     /*!
         The type roles in pixels for the current density, font scale and
         Bold text: \c{Theme.type.bodyLarge.pixelSize} and so on. \c weight
         is what the role asks the installed family for, \c{axes.wght} the
-        CP3A weight (they differ for titleMedium and titleSmall).
+        CP3A weight (they differ for titleMedium and titleSmall). The 12
+        Material 2 roles (\l m2TypeRoles: \c body1 ...) are here too; under
+        \l materialVersion 2 numeralSmall and numeralMedium are weight 400.
     */
     readonly property var type: {
         var out = {}
         var k = density * fontScale
         var adj = weightAdjust
+        var m2 = materialVersion === 2
         for (var name in _typeScale) {
             var r = _typeScale[name]
-            var w = Math.min(1000, r[2] + adj)
+            var w = Math.min(1000, (m2 && _m2Weight[name] !== undefined ? _m2Weight[name] : r[2]) + adj)
             var face = _staticWeight[name] !== undefined ? Math.min(1000, _staticWeight[name] + adj) : w
             out[name] = {
                 pixelSize: r[0] * k,
@@ -280,6 +342,21 @@ QtObject {
                 letterSpacing: r[4] * k,
                 letterSpacingBottom: r[5] * k,
                 axes: { "wght": w, "wdth": r[3], "ROND": 100, "opsz": r[0] }
+            }
+        }
+        for (var name2 in _m2TypeScale) {
+            var s = _m2TypeScale[name2]
+            var w2 = Math.min(1000, s[2] + adj)
+            out[name2] = {
+                pixelSize: s[0] * k,
+                lineHeight: s[1] * k,
+                weight: w2,
+                width: 100,
+                roundness: 0,
+                opsz: s[0],
+                letterSpacing: s[3] * k,
+                letterSpacingBottom: s[3] * k,
+                axes: { "wght": w2, "wdth": 100, "ROND": 0, "opsz": s[0] }
             }
         }
         return out
@@ -324,6 +401,62 @@ QtObject {
         onErrorContainer: "#FFD7D4"
     })
 
+    /*!
+        The Wear Material 2 palette (androidx.wear.compose.material Colors
+        defaults). The emulator's Material 2 apps measure exactly these:
+        surface and chips #303133 (S31 chip, S29-b body, S30-c row, S32
+        chip); text, second lines and icons #FFFFFF (S31 'Favorites' and its
+        star, S29-b '7:02 PM' and 'One time'); primary #AECBFA (S30-b search
+        disc); secondary #FDE293 (S29-b switch thumb, S28-c 'Hour'); glyphs
+        on light discs #303133 (S28-b '+', S28-c check, S30-b search).
+    */
+    readonly property var m2Palette: ({
+        primary: "#AECBFA",
+        primaryVariant: "#8AB4F8",
+        secondary: "#FDE293",
+        secondaryVariant: "#594F33",
+        background: "#000000",
+        surface: "#303133",
+        error: "#EE675C",
+        onPrimary: "#303133",
+        onSecondary: "#303133",
+        onBackground: "#FFFFFF",
+        onSurface: "#FFFFFF",
+        onSurfaceVariant: "#DADCE0",
+        onError: "#000000"
+    })
+
+    /*!
+        The 29 colour roles of a Material 2 application (\l materialVersion
+        2): \l m2Palette mapped to the Material 3 roles: primary,
+        primaryDim (primaryVariant) and onPrimary; secondary, secondaryDim
+        and onSecondary (#FDE293, #FDE293, #303133); surfaceContainerLow
+        and surfaceContainer (surface #303133) and surfaceContainerHigh
+        #454648 (the S29-b switch segment); onSurface, onSurfaceVariant,
+        background, onBackground, error and onError. Material 2 has no
+        other roles, so the rest keep the static palette.
+    */
+    readonly property var m2Roles: {
+        var p = m2Palette
+        var m = Object.assign({}, staticPalette)
+        m.primary = p.primary
+        m.primaryDim = p.primaryVariant
+        m.onPrimary = p.onPrimary
+        m.secondary = p.secondary
+        m.secondaryDim = p.secondary
+        m.onSecondary = p.onSecondary
+        m.surfaceContainerLow = p.surface
+        m.surfaceContainer = p.surface
+        m.surfaceContainerHigh = "#454648"
+        m.onSurface = p.onSurface
+        m.onSurfaceVariant = p.onSurfaceVariant
+        m.background = p.background
+        m.onBackground = p.onBackground
+        m.error = p.error
+        m.onError = p.onError
+        return m
+    }
+
     /*! The colour roles; plain properties so a colour theme can rebind them. */
     property QtObject color: QtObject {
         property color primary: theme.staticPalette.primary
@@ -360,8 +493,9 @@ QtObject {
         property color content: "#FFFFFF"
         /*! Icons in tonal buttons and rows (FilledTonalButtonTokens.java:23). */
         property color icon: primary
-        /*! Time text: onBackground at tone 80 (TimeTextDefaults.java:16-20; inferred +/-1). */
-        property color timeText: "#C6C6C6"
+        /*! Time text: onBackground at tone 80 (TimeTextDefaults.java:16-20; inferred +/-1);
+            onBackground #FFFFFF in a Material 2 application (S27-S31). */
+        property color timeText: theme.materialVersion === 2 ? theme.m2Palette.onBackground : "#C6C6C6"
         /*! The scrim behind the time text: black at 0.85 (TimeTextKt.java:89-90). */
         property color timeTextScrim: Qt.rgba(0, 0, 0, 0.85)
         /*! Scroll indicator thumb / track: tone 80 / tone 20 (ScrollIndicatorKt.java:269-273). */
@@ -397,6 +531,9 @@ QtObject {
         applyColorTheme() writes the 29 roles to Theme.color, only when the
         setting or the face colours change (never on a tick, never in
         ambient). The static palette is Moonstone's NEUTRAL scheme exactly.
+        A Material 2 application (materialVersion 2) is never themed: the
+        emulator's Clock, Contacts and Phone keep their fixed colours under
+        every Color theme, so it gets m2Roles whatever the keys say.
 
         dconf keys (all strings):
           /org/asteroidos/theme/color-source   "static" (No theme, default
@@ -552,18 +689,20 @@ QtObject {
 
     /*!
         Writes the 29 roles of the current theme to Theme.color: the static
-        palette for No theme, else a palette generated from the seed. A no-op
-        while nothing that matters changed; it runs when a key changes and once
-        at start.
+        palette for No theme, else a palette generated from the seed, and
+        \l m2Roles in a Material 2 application whatever the theme. A no-op
+        while nothing that matters changed; it runs when a key or
+        \l materialVersion changes and once at start.
     */
     function applyColorTheme(force) {
         var t = _colorTheme
-        var key = t.themed ? (t.seed + "|" + t.accent + "|" + t.styleId) : "static"
+        var m2 = materialVersion === 2
+        var key = m2 ? "m2" : t.themed ? (t.seed + "|" + t.accent + "|" + t.styleId) : "static"
         if (!force && key === _appliedColorKey)
             return
         _appliedColorKey = key
-        var map = staticPalette
-        if (t.themed) {
+        var map = m2 ? m2Roles : staticPalette
+        if (!m2 && t.themed) {
             var g = PaletteGenerator.generate(t.seed, t.accent, t.styleId)
             if (g.primary !== undefined)
                 map = g
@@ -572,6 +711,7 @@ QtObject {
     }
 
     on_ColorThemeChanged: applyColorTheme(false)
+    onMaterialVersionChanged: applyColorTheme(false)
     Component.onCompleted: applyColorTheme(true)
 
     // the key values setColorTheme() writes (pure, so it can be tested)

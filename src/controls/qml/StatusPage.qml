@@ -39,6 +39,11 @@ import org.asteroid.controls
     \li the group centred on the screen.
     \endlist
 
+    In a Material 2 application (\l{Theme}{Theme.materialVersion} 2), as
+    the emulator's Contacts and Messages (S30, S32): the message and the
+    icon in onBackground #FFFFFF, the message in the Material 2 body1 role
+    (16 sp on a 20 sp line, weight 400: 23 px cap, 40 px line pitch).
+
     The application chooses the words: one plain line, not a heading.
 
     \qml
@@ -63,8 +68,9 @@ Item {
     property bool activeBackground: false
     /*! The label of the action button; empty: no button. */
     property string actionText: ""
-    /*! The muted colour of the icon and the message. */
-    property color color: Theme.color.onSurfaceVariant
+    /*! The muted colour of the icon and the message (onBackground in a Material 2 application). */
+    property color color: _m2 ? Theme.color.onBackground : Theme.color.onSurfaceVariant
+    readonly property bool _m2: Theme.materialVersion === 2
 
     /*! Emitted when the icon is tapped (\l clickable). */
     signal clicked()
@@ -108,7 +114,7 @@ Item {
         Label {
             id: statusLabel
             width: parent.width
-            role: "bodyMedium"
+            role: statusPage._m2 ? "body1" : "bodyMedium"
             color: statusPage.color
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.Wrap

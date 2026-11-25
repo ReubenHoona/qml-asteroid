@@ -91,6 +91,19 @@ Application_p {
      */
     property color centerColor: "#ffaa39"
 
+    /*!
+        The Wear Material generation of this application: 3 (default) or 2.
+        On Wear OS 6 Clock (Stopwatch, Timer, Alarm), Contacts, Phone and
+        Messages are Wear Material 2 apps with fixed colours; an application
+        that follows one of them sets \c{materialVersion: 2}. The value is
+        written to \l{Theme}{Theme.materialVersion} (each application is its
+        own process, so it stays local): the colour roles take the
+        Material 2 palette and the Color theme is not applied.
+     */
+    property int materialVersion: 3
+    onMaterialVersionChanged: Theme.materialVersion = materialVersion
+    Component.onCompleted: Theme.materialVersion = materialVersion
+
     function animIndicators() {
         rightIndicator.animate();
         leftIndicator.animate();

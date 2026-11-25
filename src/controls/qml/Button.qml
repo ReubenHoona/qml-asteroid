@@ -43,6 +43,12 @@ import org.asteroid.controls
     Disabled: container onSurface at 12 % (filled, tonal), border onSurface at
     12 % (outlined), content onSurface at 38 %.
 
+    In a Material 2 application (\l{Theme}{Theme.materialVersion} 2) the
+    second line and the icon take the content colour, as Wear Material 2's
+    ChipDefaults (secondaryContentColor = iconColor = contentColor for
+    every chip): a tonal row is white on #303133 (S31 'Favorites' and its
+    star, S29-b '7:02 PM' and 'One time').
+
     \qml
     Button { variant: "tonal"; iconName: "ios-settings"; text: "Settings"; secondaryText: "On" }
     \endqml
@@ -84,6 +90,7 @@ MouseArea {
     readonly property bool _filled: variant === "filled"
     readonly property bool _tonal: variant === "tonal"
     readonly property bool _outlined: variant === "outlined"
+    readonly property bool _m2: Theme.materialVersion === 2
 
     function _a(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
 
@@ -94,11 +101,13 @@ MouseArea {
     /*! Label colour. */
     property color contentColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
         : _filled ? Theme.color.onPrimary : Theme.color.onSurface
-    /*! Second line colour. */
-    property color secondaryContentColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
+    /*! Second line colour (the content colour in a Material 2 application). */
+    property color secondaryContentColor: _m2 ? contentColor
+        : !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
         : _filled ? _a(Theme.color.onPrimary, Theme.alpha.secondaryOnFilled) : Theme.color.onSurfaceVariant
-    /*! Icon colour. */
-    property color iconColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
+    /*! Icon colour (the content colour in a Material 2 application). */
+    property color iconColor: _m2 ? contentColor
+        : !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
         : _filled ? Theme.color.onPrimary : Theme.color.primary
     /*! Border (outlined only): 1 dp outlineVariant; onSurface 12 % disabled. */
     property color borderColor: !_outlined ? "transparent"
