@@ -37,8 +37,9 @@ import org.asteroid.controls
     under the last row of the row above and the next row 22 rows under
     the last cap row (S21-d: row 120-223, 'N' 261-277; 'R' 82-98, the
     stepper from 120). \l first: no space above (the cap top at the top
-    of the box). In a scrolling list it shrinks and fades at the edges
-    and packs with the rows (\l edgeEffect).
+    of the box). In a scrolling list of packed rows it shrinks and fades
+    at the edges and packs with them; among plain rows it stays as it is
+    (\l edgeEffect).
 
     Those two spaces include the list's own space between its items,
     \l rowGap: 4 dp in a list with the stock spacing (ScalingList, a
@@ -71,7 +72,8 @@ Item {
     readonly property alias label: label
     /*!
         Shrink and fade near the top and bottom of a round screen while the
-        list scrolls, packed with its rows (see \l EdgeEffect, packed).
+        list scrolls, packed with its rows, when the list has packed rows
+        (see \l EdgeEffect, packed, onlyWithRows).
     */
     property alias edgeEffect: edge.enabled
 
@@ -86,7 +88,7 @@ Item {
     Accessible.role: Accessible.Heading
     Accessible.name: text
 
-    EdgeEffect { id: edge; item: header; packed: true }
+    EdgeEffect { id: edge; item: header; packed: true; onlyWithRows: true }
     transform: [
         Scale {
             origin.x: header.width / 2

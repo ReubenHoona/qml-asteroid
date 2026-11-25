@@ -151,7 +151,9 @@ public:
  * scales about its edge nearest the centre. A packed effect sits out (at
  * rest) when its item, or an item it is inside, carries another
  * EdgeEffect: a ListItem given to a ScalingList as its itemDelegate, or a
- * ListHeader with an EdgeEffect of the page's own.
+ * ListHeader with an EdgeEffect of the page's own. An effect with
+ * onlyWithRows (ListHeader, ListSubHeader) takes part only when another
+ * row does; a page of plain rows keeps its headers at rest.
  */
 class EdgePacker : public QObject
 {

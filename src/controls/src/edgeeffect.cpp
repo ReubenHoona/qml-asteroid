@@ -63,6 +63,15 @@ void EdgeEffect::setPacked(bool packed)
     update();
 }
 
+void EdgeEffect::setOnlyWithRows(bool only)
+{
+    if (only == m_onlyWithRows)
+        return;
+    m_onlyWithRows = only;
+    emit specChanged();
+    update();
+}
+
 void EdgeEffect::setInset(qreal inset)
 {
     if (qFuzzyCompare(inset, m_inset))

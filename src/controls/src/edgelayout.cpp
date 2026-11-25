@@ -410,6 +410,7 @@ void EdgePacker::doLayout()
     QVector<EdgeEffect *> rest;
     const qreal vh = f->height();
     const bool reduced = ReduceMotion::instance()->enabled();
+    int leaders = 0;
     for (const QPointer<EdgeEffect> &e : effects) {
         if (!e || !e->m_packed)
             continue;
@@ -433,12 +434,21 @@ void EdgePacker::doLayout()
             rest << e.data();
             continue;
         }
+        if (!e->m_onlyWithRows)
+            leaders++;
         /* the natural place: through the parent, without the item's own
          * transform (the one this layout drives) */
         const qreal y = it->parentItem()->mapToItem(f, QPointF(0, it->y())).y();
         const qreal itemH = it->height();
         const qreal inset = qBound<qreal>(0, e->m_inset, itemH / 2 - 0.5);
         rows.append(Row{ e.data(), y + inset, itemH - 2 * inset, inset, itemH });
+    }
+    /* headers alone (no other row takes part): at rest, as a page of plain
+     * rows had them */
+    if (leaders == 0) {
+        for (const Row &r : std::as_const(rows))
+            rest << r.effect;
+        rows.clear();
     }
     std::stable_sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.top < b.top; });
     const int n = rows.size();

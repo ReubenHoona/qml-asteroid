@@ -68,7 +68,10 @@ class QQuickItem;
  *
  * A packed effect stays at rest when its item, or an item it is inside,
  * carries another EdgeEffect (a ListItem in a ScalingList's itemDelegate,
- * a ListHeader the page gives an EdgeEffect of its own). measure is not
+ * a ListHeader the page gives an EdgeEffect of its own). With onlyWithRows
+ * (ListHeader, ListSubHeader) it takes part only when another row of the
+ * Flickable does (ListItem, ListRow, a ScalingList row, InlineSlider,
+ * Button.edgeEffect); among plain rows it stays at rest. measure is not
  * used when packed (always the inner edge).
  *
  * The values per surface are properties: Settings and most lists keep the
@@ -100,6 +103,8 @@ class EdgeEffect : public QObject, public QQmlParserStatus
     Q_PROPERTY(bool packed READ packed WRITE setPacked NOTIFY specChanged)
     /* packed: the space above and below the row inside the item (px) */
     Q_PROPERTY(qreal inset READ inset WRITE setInset NOTIFY specChanged)
+    /* packed: take part only when another row of the Flickable does (headers) */
+    Q_PROPERTY(bool onlyWithRows READ onlyWithRows WRITE setOnlyWithRows NOTIFY specChanged)
     /* packed: the Translate after the Scale (0 when not packed) */
     Q_PROPERTY(qreal translateY READ translateY NOTIFY valuesChanged)
     /* packed: the Scale's origin.y, the row's edge nearest the centre (0
@@ -145,6 +150,8 @@ public:
     void setPacked(bool packed);
     qreal inset() const { return m_inset; }
     void setInset(qreal inset);
+    bool onlyWithRows() const { return m_onlyWithRows; }
+    void setOnlyWithRows(bool only);
     qreal translateY() const { return m_translateY; }
     qreal originY() const { return m_originY; }
 
@@ -192,6 +199,7 @@ private:
     Measure m_measure = InnerEdge;
     bool m_packed = false;
     qreal m_inset = 0;
+    bool m_onlyWithRows = false;
     qreal m_translateY = 0;
     qreal m_originY = 0;
     /* the stock spec with this effect's edge values, for the packer */
