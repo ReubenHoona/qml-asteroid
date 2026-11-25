@@ -46,7 +46,11 @@ import org.asteroid.controls
         stroked failure glyph 104 px in errorDim, each stroke drawn in
         267 ms, the second from 100 ms; from 150 ms the content moves
         -8 px, -15 px, then back to 0 on a bouncy spring (damping 0.5); the
-        reject haptic;
+        reject haptic; in a Material 2 application
+        (\c{Theme.materialVersion} 2), whose onError is #000000 (black on
+        the black dialog), the container is error #EE675C with the glyph in
+        onError #000000 (Wear Material 2's error pair; no emulator capture
+        shows a failure);
     \li open on phone: a 249 px circle (64.8 %) 60 px (15.7 %) from the top
         in primaryContainer #404759; a ring 10 px in, 10 px wide, primary on
         onPrimary, from 12 o'clock, filling linearly over \l duration -
@@ -70,6 +74,12 @@ Dialog {
     property bool success: true
     /*! "success", "failure" or "openOnPhone". */
     property string type: "success"
+    readonly property bool _m2: Theme.materialVersion === 2
+    /*! The container and glyph colours of the failure: onError at 80 % and
+        errorDim; error and onError in Material 2. */
+    readonly property color failureContainerColor: _m2 ? Theme.color.error
+        : Qt.rgba(Theme.color.onError.r, Theme.color.onError.g, Theme.color.onError.b, 0.8)
+    readonly property color failureGlyphColor: _m2 ? Theme.color.onError : Theme.color.errorDim
     /*! How long it stays, ms (stock ConfirmationDialogDefaults: 4000). */
     property int duration: defaultDuration
     readonly property int defaultDuration: 4000
@@ -321,7 +331,7 @@ Dialog {
                 return full
             }
             color: confirmation.type === "success" ? Theme.color.onPrimary
-                 : confirmation.type === "failure" ? Qt.rgba(Theme.color.onError.r, Theme.color.onError.g, Theme.color.onError.b, 0.8)
+                 : confirmation.type === "failure" ? confirmation.failureContainerColor
                  : confirmation._mix(Theme.color.primaryContainer, Theme.color.onPrimaryContainer, confirmation._end)
         }
 
@@ -378,7 +388,7 @@ Dialog {
             glyph: confirmation.type === "success" ? "check" : confirmation.type === "failure" ? "failure" : "phone"
             strokeUnits: confirmation.iconStroke * 24 / Math.max(1, size)
             color: confirmation.type === "success" ? Theme.color.primary
-                 : confirmation.type === "failure" ? Theme.color.errorDim
+                 : confirmation.type === "failure" ? confirmation.failureGlyphColor
                  : confirmation._mix(Theme.color.onPrimaryContainer, Theme.color.primaryContainer, confirmation._end)
             progress: confirmation._stroke1
             progress2: confirmation.type === "success" ? 1 : confirmation._stroke2
