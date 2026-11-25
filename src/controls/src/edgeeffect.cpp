@@ -35,6 +35,64 @@ EdgeEffect::EdgeEffect(QObject *parent) : QObject(parent),
 {
     setEasing(QVariantList{0.3, 0.0, 0.7, 1.0});
     connect(ReduceMotion::instance(), &ReduceMotion::changed, this, &EdgeEffect::update);
+    /* the packer's spec follows the edge values */
+    connect(this, &EdgeEffect::specChanged, this, [this]() {
+        m_spec.scale = { m_edgeScale, 1, m_edgeScale, 0, 1 };
+        m_spec.containerAlpha = { m_edgeAlpha, 1, m_edgeAlpha, 0, 1 };
+        m_spec.contentAlpha = { m_edgeContentAlpha, 1, m_edgeContentAlpha, 0, 1 };
+        for (int i = 0; i < 4 && i < m_easing.size(); i++)
+            m_spec.easing[i] = m_easing[i].toReal();
+    });
+    emit specChanged();
+}
+
+EdgeEffect::~EdgeEffect()
+{
+    if (m_packer)
+        m_packer->remove(this);
+}
+
+void EdgeEffect::setPacked(bool packed)
+{
+    if (packed == m_packed)
+        return;
+    m_packed = packed;
+    emit specChanged();
+    if (m_packer)
+        m_packer->relayout();
+    update();
+}
+
+void EdgeEffect::setInset(qreal inset)
+{
+    if (qFuzzyCompare(inset, m_inset))
+        return;
+    m_inset = inset;
+    emit specChanged();
+    update();
+}
+
+void EdgeEffect::setLayoutValues(qreal scale, qreal alpha, qreal contentAlpha, qreal translateY, qreal originY)
+{
+    const qreal itemH = m_item ? m_item->height() : 0;
+    if (!qFuzzyCompare(scale, m_scale) || !qFuzzyCompare(alpha, m_alpha)
+            || !qFuzzyCompare(contentAlpha, m_contentAlpha) || itemH != m_itemH
+            || translateY != m_translateY || originY != m_originY) {
+        m_itemH = itemH;
+        m_scale = scale;
+        m_alpha = alpha;
+        m_contentAlpha = contentAlpha;
+        m_translateY = translateY;
+        m_originY = originY;
+        emit valuesChanged();
+    }
+}
+
+void EdgeEffect::flickableMoved()
+{
+    /* a packed row: the packer lays all rows out once per move */
+    if (!driven())
+        update();
 }
 
 void EdgeEffect::setEdgeScale(qreal s)
@@ -155,13 +213,24 @@ void EdgeEffect::findFlickable()
         }
     }
     if (found) {
-        m_connections << connect(found, SIGNAL(contentYChanged()), this, SLOT(update()));
+        m_connections << connect(found, SIGNAL(contentYChanged()), this, SLOT(flickableMoved()));
         m_connections << connect(found, SIGNAL(contentHeightChanged()), this, SLOT(updateContentHeight()));
         m_connections << connect(found, SIGNAL(topMarginChanged()), this, SLOT(updateContentHeight()));
         m_connections << connect(found, SIGNAL(bottomMarginChanged()), this, SLOT(updateContentHeight()));
-        m_connections << connect(found, &QQuickItem::heightChanged, this, &EdgeEffect::update);
+        m_connections << connect(found, &QQuickItem::heightChanged, this, &EdgeEffect::flickableMoved);
         m_connections << connect(m_item, &QQuickItem::yChanged, this, &EdgeEffect::update);
         m_connections << connect(m_item, &QQuickItem::heightChanged, this, &EdgeEffect::update);
+        m_connections << connect(m_item, &QQuickItem::visibleChanged, this, &EdgeEffect::update);
+    }
+    /* every effect of a Flickable joins its packer (a packed one is laid
+     * out by it; the others only keep packed rows inside them at rest) */
+    EdgePacker *packer = found ? EdgePacker::forFlickable(found) : nullptr;
+    if (m_packer != packer) {
+        if (m_packer)
+            m_packer->remove(this);
+        m_packer = packer;
+        if (m_packer)
+            m_packer->add(this);
     }
     if (m_flickable != found) {
         m_flickable = found;
@@ -176,11 +245,17 @@ void EdgeEffect::updateContentHeight()
     m_contentH = f ? f->property("contentHeight").toReal() + f->property("topMargin").toReal()
                      + f->property("bottomMargin").toReal()
                    : 0;
-    update();
+    /* a packed row does not depend on the content height */
+    if (!driven())
+        update();
 }
 
 void EdgeEffect::update()
 {
+    if (driven()) {
+        m_packer->relayout();
+        return;
+    }
     qreal scale = 1;
     qreal alpha = 1;
     qreal contentAlpha = 1;
@@ -212,13 +287,6 @@ void EdgeEffect::update()
             contentAlpha = valueAt(x, m_edgeContentAlpha);
         }
     }
-    const qreal itemH = m_item ? m_item->height() : 0;
-    if (!qFuzzyCompare(scale, m_scale) || !qFuzzyCompare(alpha, m_alpha)
-            || !qFuzzyCompare(contentAlpha, m_contentAlpha) || itemH != m_itemH) {
-        m_itemH = itemH;
-        m_scale = scale;
-        m_alpha = alpha;
-        m_contentAlpha = contentAlpha;
-        emit valuesChanged();
-    }
+    /* not packed, or no Flickable: scaled about the top where it is */
+    setLayoutValues(scale, alpha, contentAlpha, 0, 0);
 }

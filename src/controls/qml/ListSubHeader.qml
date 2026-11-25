@@ -27,7 +27,9 @@ import org.asteroid.controls
     Stock (ListSubHeaderTokens.java:6-8): titleSmall (14 sp, weight 550,
     16 sp line) in onSurface, start-aligned at the bottom of an at least
     48 dp tall box; 4.16 % of the screen width each side (16 px), 12 dp
-    above (0 for a page's first item, \l first) and 8 dp below.
+    above (0 for a page's first item, \l first) and 8 dp below. In a
+    scrolling list it shrinks and fades at the edges and packs with the
+    rows (\l edgeEffect).
 */
 Item {
     id: header
@@ -40,6 +42,11 @@ Item {
     readonly property real topPadding: first ? 0 : Theme.space.l
     readonly property real bottomPadding: Theme.space.m
     readonly property alias label: label
+    /*!
+        Shrink and fade near the top and bottom of a round screen while the
+        list scrolls, packed with its rows (see \l EdgeEffect, packed).
+    */
+    property alias edgeEffect: edge.enabled
 
     width: parent ? parent.width : Theme.dp(192)
     implicitHeight: Math.max(Theme.size.listHeader, label.implicitHeight + topPadding + bottomPadding)
@@ -48,8 +55,20 @@ Item {
     Accessible.role: Accessible.Heading
     Accessible.name: text
 
+    EdgeEffect { id: edge; item: header; packed: true }
+    transform: [
+        Scale {
+            origin.x: header.width / 2
+            origin.y: edge.originY
+            xScale: edge.scale
+            yScale: edge.scale
+        },
+        Translate { y: edge.translateY }
+    ]
+
     Label {
         id: label
+        opacity: edge.alpha
         anchors {
             left: parent.left
             right: parent.right

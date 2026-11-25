@@ -85,7 +85,9 @@ Item {
     property int labelFontSize: Theme.type.labelMedium.pixelSize
     /*!
         Shrink and fade the item near the top and bottom of a round screen
-        while it scrolls in a list, as Wear OS lists do (see \l EdgeEffect).
+        while it scrolls in a list, as Wear OS lists do: about its edge
+        nearest the centre, packed with the list's other rows so they stay
+        4 dp apart (see \l EdgeEffect, packed).
     */
     property alias edgeEffect: edge.enabled
     /*! The row button (for tests). */
@@ -98,13 +100,17 @@ Item {
     // the 52 dp row plus the 4 dp list spacing (ScalingLazyColumnKt.java:167)
     height: Theme.size.button + Theme.space.xs
 
-    EdgeEffect { id: edge; item: listItem }
-    transform: Scale {
-        origin.x: listItem.width / 2
-        origin.y: listItem.height / 2
-        xScale: edge.scale
-        yScale: edge.scale
-    }
+    // the row is measured and packed without the 2 dp above and below it
+    EdgeEffect { id: edge; item: listItem; packed: true; inset: Theme.space.xs / 2 }
+    transform: [
+        Scale {
+            origin.x: listItem.width / 2
+            origin.y: edge.originY
+            xScale: edge.scale
+            yScale: edge.scale
+        },
+        Translate { y: edge.translateY }
+    ]
 
     Button {
         id: row

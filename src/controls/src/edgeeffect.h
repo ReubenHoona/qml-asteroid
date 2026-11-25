@@ -13,6 +13,8 @@
 #include <QVariantList>
 #include <QtQml/qqmlregistration.h>
 
+#include "edgelayout.h"
+
 class QQuickItem;
 
 /*
@@ -40,6 +42,35 @@ class QQuickItem;
  *           opacity: edge.alpha }
  *   }
  *
+ * Packed (`packed: true`, N61-04): the row keeps its natural place in the
+ * Flickable and the effect also says where its picture goes. All packed
+ * effects of a Flickable are laid out together (EdgeLayout, the launcher's
+ * WearEdge.js layout): the row nearest the middle stays, the rows below
+ * follow it from its bottom and the rows above from its top, each at its
+ * transformed height and its natural gap, so shrunk rows stay 8 px apart
+ * and the list still scrolls evenly at its natural length. Each row scales
+ * about its edge nearest the centre (originY: its top in the lower half,
+ * its bottom in the upper half; the rows below the middle row follow its
+ * bottom, the rows above it its top) and moves by translateY; scale and
+ * alphas are the values at the place it is drawn (the Wear OS 6 emulator,
+ * Settings S16-S22: a row bottom at y 74 is at 0.85 / 0.75, a row top at
+ * y 347 at 0.75 / 0.58). `inset` is the part of the item above and below
+ * the row that belongs to the gap (ListItem and ListRow keep 2 dp):
+ *
+ *   Item { id: row
+ *       EdgeEffect { id: edge; item: row; packed: true }
+ *       transform: [
+ *           Scale { origin.x: row.width / 2; origin.y: edge.originY
+ *                   xScale: edge.scale; yScale: edge.scale },
+ *           Translate { y: edge.translateY } ]
+ *       opacity: edge.alpha
+ *   }
+ *
+ * A packed effect stays at rest when its item, or an item it is inside,
+ * carries another EdgeEffect (a ListItem in a ScalingList's itemDelegate,
+ * a ListHeader the page gives an EdgeEffect of its own). measure is not
+ * used when packed (always the inner edge).
+ *
  * The values per surface are properties: Settings and most lists keep the
  * defaults (scale 0.7, alpha 0.5, easing (0.3, 0, 0.7, 1)); the
  * notification stream sets edgeScale 0.6 and easing [0, 0, 0.6, 1]
@@ -65,6 +96,15 @@ class EdgeEffect : public QObject, public QQmlParserStatus
     Q_PROPERTY(qreal transformedHeight READ transformedHeight NOTIFY valuesChanged)
     /* -(1 - scale) h / 2: the shift that pins a centre-scaled item at its top */
     Q_PROPERTY(qreal offsetY READ offsetY NOTIFY valuesChanged)
+    /* packed: lay the row out with the Flickable's other packed rows */
+    Q_PROPERTY(bool packed READ packed WRITE setPacked NOTIFY specChanged)
+    /* packed: the space above and below the row inside the item (px) */
+    Q_PROPERTY(qreal inset READ inset WRITE setInset NOTIFY specChanged)
+    /* packed: the Translate after the Scale (0 when not packed) */
+    Q_PROPERTY(qreal translateY READ translateY NOTIFY valuesChanged)
+    /* packed: the Scale's origin.y, the row's edge nearest the centre (0
+     * when not packed: the top) */
+    Q_PROPERTY(qreal originY READ originY NOTIFY valuesChanged)
     Q_PROPERTY(qreal edgeScale READ edgeScale WRITE setEdgeScale NOTIFY specChanged)
     Q_PROPERTY(qreal edgeAlpha READ edgeAlpha WRITE setEdgeAlpha NOTIFY specChanged)
     Q_PROPERTY(qreal edgeContentAlpha READ edgeContentAlpha WRITE setEdgeContentAlpha NOTIFY specChanged)
@@ -80,6 +120,7 @@ public:
     Q_ENUM(Measure)
 
     explicit EdgeEffect(QObject *parent = nullptr);
+    ~EdgeEffect() override;
 
     QQuickItem *item() const { return m_item; }
     void setItem(QQuickItem *item);
@@ -100,6 +141,12 @@ public:
     void setEasing(const QVariantList &e);
     Measure measure() const { return m_measure; }
     void setMeasure(Measure m);
+    bool packed() const { return m_packed; }
+    void setPacked(bool packed);
+    qreal inset() const { return m_inset; }
+    void setInset(qreal inset);
+    qreal translateY() const { return m_translateY; }
+    qreal originY() const { return m_originY; }
 
     /* The stock curve, for tests: the value at a transition-area progress
      * x (0 at the edge, 1 out of the area) for an edge value */
@@ -120,8 +167,14 @@ private slots:
     void findFlickable();
     void update();
     void updateContentHeight();
+    void flickableMoved();
 
 private:
+    friend class EdgePacker;
+    /* the packer's values for this row */
+    void setLayoutValues(qreal scale, qreal alpha, qreal contentAlpha, qreal translateY, qreal originY);
+    bool driven() const { return m_packed && m_packer; }
+
     QPointer<QQuickItem> m_item;
     QPointer<QQuickItem> m_flickable;
     QList<QMetaObject::Connection> m_connections;
@@ -137,6 +190,13 @@ private:
     qreal m_edgeContentAlpha = 0.5;
     QVariantList m_easing;
     Measure m_measure = InnerEdge;
+    bool m_packed = false;
+    qreal m_inset = 0;
+    qreal m_translateY = 0;
+    qreal m_originY = 0;
+    /* the stock spec with this effect's edge values, for the packer */
+    EdgeSpec m_spec;
+    QPointer<EdgePacker> m_packer;
     /* the flickable's content height with its margins, read when it
      * changes, not on every scrolled pixel */
     qreal m_contentH = 0;

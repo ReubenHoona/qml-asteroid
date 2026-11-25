@@ -30,7 +30,9 @@ import org.asteroid.controls
     centred, up to 3 lines with an ellipsis, at least 48 dp tall; 12 % of the
     screen width each side (46 px on the Pixel Watch 2), 4 dp above and
     12 dp below. Use it as a ListView header or the first item of a
-    Flickable's Column instead of \l PageHeader:
+    Flickable's Column instead of \l PageHeader. In a scrolling list it
+    shrinks and fades at the edges and packs with the rows, as stock list
+    headers do (\l edgeEffect):
 
     \qml
     ListView {
@@ -51,6 +53,12 @@ Item {
     property real bottomPadding: Theme.space.l
     /*! The label (for tests). */
     readonly property alias label: label
+    /*!
+        Shrink and fade near the top and bottom of a round screen while the
+        list scrolls, packed with its rows (see \l EdgeEffect, packed). A
+        page that gives the header an EdgeEffect of its own keeps that one.
+    */
+    property alias edgeEffect: edge.enabled
 
     width: parent ? parent.width : Theme.dp(192)
     implicitHeight: Math.max(Theme.size.listHeader, label.implicitHeight + topPadding + bottomPadding)
@@ -59,8 +67,20 @@ Item {
     Accessible.role: Accessible.Heading
     Accessible.name: text
 
+    EdgeEffect { id: edge; item: header; packed: true }
+    transform: [
+        Scale {
+            origin.x: header.width / 2
+            origin.y: edge.originY
+            xScale: edge.scale
+            yScale: edge.scale
+        },
+        Translate { y: edge.translateY }
+    ]
+
     Label {
         id: label
+        opacity: edge.alpha
         anchors {
             left: parent.left
             right: parent.right

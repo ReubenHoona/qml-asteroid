@@ -98,7 +98,9 @@ Item {
     property bool checkedStyle: false
     /*!
         Shrink and fade the row near the top and bottom of a round screen
-        while it scrolls in a list, as Wear OS lists do (see \l EdgeEffect).
+        while it scrolls in a list, as Wear OS lists do: about its edge
+        nearest the centre, packed with the list's other rows so they stay
+        4 dp apart (see \l EdgeEffect, packed).
     */
     property alias edgeEffect: edge.enabled
     /*! The container (for subclasses and tests). */
@@ -129,13 +131,17 @@ Item {
 
     signal clicked()
 
-    EdgeEffect { id: edge }
-    transform: Scale {
-        origin.x: listRow.width / 2
-        origin.y: listRow.height / 2
-        xScale: edge.scale
-        yScale: edge.scale
-    }
+    // the row is measured and packed without the 2 dp above and below it
+    EdgeEffect { id: edge; packed: true; inset: Theme.space.xs / 2 }
+    transform: [
+        Scale {
+            origin.x: listRow.width / 2
+            origin.y: edge.originY
+            xScale: edge.scale
+            yScale: edge.scale
+        },
+        Translate { y: edge.translateY }
+    ]
 
     Behavior on opacity {
         NumberAnimation {

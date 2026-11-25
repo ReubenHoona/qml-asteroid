@@ -8,6 +8,7 @@ set(SRC
 	src/haptics.cpp
 	src/rotaryinput.cpp
 	src/edgeeffect.cpp
+	src/edgelayout.cpp
 	src/framediagnostics.cpp
 	src/backswipearea.cpp
 	src/wordpredictor.cpp
@@ -26,6 +27,7 @@ set(HEADERS
 	src/haptics.h
 	src/rotaryinput.h
 	src/edgeeffect.h
+	src/edgelayout.h
 	src/framediagnostics.h
 	src/backswipearea.h
 	src/wordpredictor.h
