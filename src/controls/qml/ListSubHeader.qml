@@ -28,7 +28,12 @@ import org.asteroid.controls
     volume', S21 / S21-d): labelSmall (13 sp, Medium) in onSurface,
     start-aligned with the ink of a stem letter (H, N, R) 16 dp inside the
     list's 5.2 % side padding (x 52 on 384 px; S21-d 'Notification
-    volume' from x 51), no least height; the first cap row 38 pixel rows
+    volume' from x 51). The header is usually as wide as the rows (a
+    Column or a ScalingList row 5.2 % in from each side), so
+    \l textInset, from its own left edge, is 16 dp; a header as wide as
+    the screen (next to ListItem or ListRow, which keep the 5.2 %
+    inside) sets \c{textInset: Theme.margin.listSide + Theme.dp(16)}.
+    No least height; the first cap row 38 pixel rows
     under the last row of the row above and the next row 22 rows under
     the last cap row (S21-d: row 120-223, 'N' 261-277; 'R' 82-98, the
     stepper from 120). \l first: no space above (the cap top at the top
@@ -48,9 +53,11 @@ Item {
     property alias text: label.text
     /*! The first item of the page: no space above. */
     property bool first: false
-    /*! The text's inset each side: the ink of an H at the list's 5.2 % plus
-        16 dp (52 px), so the label starts that much less its left bearing. */
-    property real horizontalPadding: Theme.margin.listSide + Theme.dp(16) - capMetrics.tightBoundingRect.x
+    /*! Where the ink of a stem letter starts, from the header's left edge:
+        16 dp (x 52 in a list 5.2 % in from the screen's edge). */
+    property real textInset: Theme.dp(16)
+    /*! The label's inset each side: textInset less the font's left bearing. */
+    property real horizontalPadding: textInset - capMetrics.tightBoundingRect.x
     /*! The space the list already leaves around this header (see above). */
     property real rowGap: Theme.space.xs
     /*! From the top of the box to the cap top: 37 px from the row above
