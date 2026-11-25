@@ -83,10 +83,11 @@ Button {
     iconColor: _m2 ? contentColor
         : !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent) : Theme.color.primary
     // Material 2: the checked gradient on the slow effects spring, as SwitchButton
+    // (38 % when disabled)
     WearSpring {
         target: row
         property: "checkedGradient"
-        to: row._m2 && row.checked ? 1 : 0
+        to: row._m2 && row.checked ? (row.enabled ? 1 : Theme.alpha.disabledContent) : 0
         stiffness: Motion.standard.slowEffects.stiffness
         dampingRatio: 1.0
         visibilityThreshold: 0.001

@@ -36,7 +36,9 @@ import org.asteroid.controls
     \li Second line and icon primary ('Will turn on at 10%' #DBE2F9); the
         content colour (onSurface) in a Material 2 application.
     \li Disabled: the container stays, label, second line and icon
-        #80868B (S23-b).
+        #80868B (S23-b); a checked one keeps its gradient at 38 % (Wear
+        Material 2 dims a disabled chip to ContentAlpha.disabled; no
+        capture).
     \li The small switch (24 x 10 dp track, 14 dp thumb) in a 24 dp slot
         6 dp after the label and 14 dp from the end (its right end 28 px in
         from the row's end); its track lies translucent over the gradient.
@@ -70,12 +72,14 @@ Button {
     iconColor: !enabled ? Theme.color.disabledContentFlat
         : _m2 ? contentColor : Theme.color.primary
 
-    // the gradient on the slow effects spring (stiffness 260, about 412 ms)
+    // the gradient on the slow effects spring (stiffness 260, about 412 ms);
+    // a disabled checked row at 38 %, as Wear Material 2 dims a disabled chip
+    // (ContentAlpha.disabled; no capture)
     // (written by the spring below, which sets the first value as it is: no binding here)
     WearSpring {
         target: row
         property: "checkedGradient"
-        to: row.checked ? 1 : 0
+        to: row.checked ? (row.enabled ? 1 : Theme.alpha.disabledContent) : 0
         stiffness: Motion.standard.slowEffects.stiffness
         dampingRatio: 1.0
         visibilityThreshold: 0.001
