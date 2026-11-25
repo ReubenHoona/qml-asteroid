@@ -47,6 +47,12 @@ import org.asteroid.controls
     \li No divider lines.
     \endlist
 
+    For the Clock's Material 2 picker (\l PickerGroup under
+    \c{Theme.materialVersion} 2) \l showNeighbours false draws only the
+    selected option (an unfocused column), \l neighbourColor colours the
+    options above and below it (they keep the scale and the fade), and
+    \l optionWeight sets the options' weight (400 there).
+
     \qml
     Picker {
         anchors.fill: parent
@@ -101,6 +107,14 @@ Item {
     property color invalidColor: Qt.rgba(Theme.color.onSurface.r, Theme.color.onSurface.g, Theme.color.onSurface.b, Theme.alpha.disabledContent)
     /*! The text colour of the column now. */
     readonly property color contentColor: focused ? selectedColor : unselectedColor
+    /*! The colour of the options above and below the selected one (they
+        keep their scale and fade): the column's colour. */
+    property color neighbourColor: contentColor
+    /*! Draw the options above and below the selected one; false: the
+        selected option only (an unfocused column of the Material 2 picker). */
+    property bool showNeighbours: true
+    /*! The options' weight; 0: the role's (Label.weight). */
+    property int optionWeight: 0
 
     /*! The view the crown turns (RotaryInput steps it). */
     readonly property alias view: _lv
@@ -212,8 +226,10 @@ Item {
             text: picker.textFor ? picker.textFor(option) : zeroPadding(option)
             height: picker.optionHeight
             role: picker.role
+            weight: picker.optionWeight
             font.features: picker.fontFeatures
-            color: invalid ? picker.invalidColor : picker.contentColor
+            color: invalid ? picker.invalidColor : isCurr ? picker.contentColor : picker.neighbourColor
+            visible: isCurr || picker.showNeighbours
             // in the delegate, so the view keeps its drags (the view steals
             // the grab past the drag threshold)
             TapHandler {

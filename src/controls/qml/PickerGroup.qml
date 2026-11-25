@@ -49,6 +49,23 @@ import org.asteroid.controls
         at 12 % / 38 %.
     \endlist
 
+    In a Material 2 application (\c{Theme.materialVersion} 2) the group
+    takes the Clock's picker of the Wear OS 6 emulator (S28-c Timer, S29-c
+    Alarm):
+    \list
+    \li heading secondary #FDE293 (titleMedium, weight 500);
+    \li the focused column's value and its neighbours (scaled and faded as
+        before) in secondary #FDE293;
+    \li the other columns only their value, in #FFFFFF (onBackground), no
+        neighbours;
+    \li separators #FFFFFF; options weight 400 (\l optionWeight);
+    \li a round 52 dp filled button (\l roundConfirm) centred 9 dp above
+        the bottom (the disc x 140-243, y 262-365) in place of the edge
+        button: \l confirmContainerColor (Material 2 primary #AECBFA; the
+        Timer and the Alarm set #FFFFFF) with an onPrimary #303133 26 dp
+        check (ink 34 x 25 px); the columns end 4 dp above it.
+    \endlist
+
     \l columns is a list of column descriptions:
     \c{{ label, count, repeat, width, text: function(option),
     invalid: function(option), initial: function(), separatorBefore }}; \c count and \c width may be functions (read in
@@ -91,10 +108,16 @@ Item {
     readonly property real headingTop: Theme.dp(14)
     property real headingHeight: Theme.dp(24)
     property real headingSide: Theme.dp(Math.ceil(Theme.screenWidthDp * 30 / 100))
+    readonly property bool _m2: Theme.materialVersion === 2
+
     /*! Heading type role and colour: titleMedium in Primary (TimePickerTokens /
-        DatePickerTokens LabelTypography, LabelColor). */
+        DatePickerTokens LabelTypography, LabelColor); secondary in Material 2. */
     property string headingRole: "titleMedium"
-    property color headingColor: Theme.color.primary
+    property color headingColor: _m2 ? Theme.color.secondary : Theme.color.primary
+    /*! The heading's shift from its band (px): 4 dp up in Material 2 (the
+        Clock's 'Hour' cap at y 31-53 on S28-c and S29-c; in the band it is
+        at 39-61). The columns keep their place. */
+    property real headingOffset: _m2 ? -Theme.dp(4) : 0
 
     /*! The columns' option style (see \l Picker): role, height, spacing,
         OpenType features. */
@@ -102,14 +125,28 @@ Item {
     property real optionHeight: Theme.dp(36)
     property real optionSpacing: Theme.dp(4)
     property var optionFeatures: Theme.tabularNumerals
+    /*! The options' weight; 0: the role's. 400 in Material 2 (the Clock's
+        regular digits, whatever the role). */
+    property int optionWeight: _m2 ? 400 : 0
     /*! Option colours: the focused column OnBackground; the others
-        SecondaryDim (TimePickerTokens); DatePicker sets PrimaryDim. */
-    property color selectedColor: Theme.color.onBackground
-    property color unselectedColor: Theme.color.secondaryDim
+        SecondaryDim (TimePickerTokens); DatePicker sets PrimaryDim.
+        Material 2: secondary and onBackground (#FFFFFF). */
+    property color selectedColor: _m2 ? Theme.color.secondary : Theme.color.onBackground
+    property color unselectedColor: _m2 ? Theme.color.onBackground : Theme.color.secondaryDim
+    /*! The columns without the focus show their neighbours (not in Material 2). */
+    property bool unfocusedNeighbours: !_m2
+    /*! The separators: OnSurfaceVariant; onBackground (#FFFFFF) in Material 2. */
+    property color separatorColor: _m2 ? Theme.color.onBackground : Theme.color.onSurfaceVariant
     /*! The Confirm button colours: PrimaryDim / OnPrimary
-        (TimePickerTokens, DatePickerTokens ConfirmButton*). */
-    property color confirmContainerColor: Theme.color.primaryDim
+        (TimePickerTokens, DatePickerTokens ConfirmButton*); Material 2
+        primary (#AECBFA) / onPrimary (#303133). */
+    property color confirmContainerColor: _m2 ? Theme.color.primary : Theme.color.primaryDim
     property color confirmContentColor: Theme.color.onPrimary
+    /*! A round 52 dp confirm button in place of the edge button (Material 2). */
+    property bool roundConfirm: _m2
+    /*! The round button's size and its space to the bottom: 52 dp, 9 dp. */
+    readonly property real roundConfirmSize: Theme.size.iconButton
+    readonly property real roundConfirmBottom: Theme.dp(9)
     /*! Padding above and below the columns: 4 dp. */
     readonly property real sectionPadding: Theme.dp(4)
     /*! Edge button height: 56 dp. */
@@ -176,7 +213,8 @@ Item {
         id: _fm
         font.family: Theme.fontFamily
         font.pixelSize: (Theme.type[group.optionRole] || Theme.type.numeralSmall).pixelSize
-        font.weight: (Theme.type[group.optionRole] || Theme.type.numeralSmall).weight
+        font.weight: group.optionWeight > 0 ? Theme.weight(group.optionWeight)
+            : (Theme.type[group.optionRole] || Theme.type.numeralSmall).weight
         font.features: group.optionFeatures
     }
     /*! The widest of the digits 0-9 in the option style (px). */
@@ -238,7 +276,7 @@ Item {
     Label {
         id: _heading
         x: group.headingSide
-        y: group.headingTop
+        y: group.headingTop + group.headingOffset
         width: Math.max(0, group.width - 2 * group.headingSide)
         height: group.headingHeight
         role: group.headingRole
@@ -252,7 +290,9 @@ Item {
         id: _area
         y: group.headingTop + group.headingHeight + group.sectionPadding
         width: group.width
-        height: Math.max(0, group.height - y - group.sectionPadding - group.buttonHeight - Theme.size.edgeButtonBottomGap)
+        height: Math.max(0, group.height - y - group.sectionPadding
+                         - (group.roundConfirm ? group.roundConfirmSize + group.roundConfirmBottom
+                                               : group.buttonHeight + Theme.size.edgeButtonBottomGap))
 
         Row {
             id: _row
@@ -289,7 +329,8 @@ Item {
                             visible: _col.separator !== ""
                             text: _col.separator
                             role: "numeralSmall"
-                            color: Theme.color.onSurfaceVariant
+                            weight: group.optionWeight
+                            color: group.separatorColor
                             horizontalAlignment: Text.AlignHCenter
                             clip: false
                         }
@@ -310,6 +351,8 @@ Item {
                         fontFeatures: group.optionFeatures
                         selectedColor: group.selectedColor
                         unselectedColor: group.unselectedColor
+                        optionWeight: group.optionWeight
+                        showNeighbours: focused || group.unfocusedNeighbours
                         Accessible.name: _col.modelData.label
                         Component.onCompleted: {
                             if (_col.modelData.initial)
@@ -332,6 +375,7 @@ Item {
 
     EdgeButton {
         id: _button
+        visible: !group.roundConfirm
         preferredHeight: group.buttonHeight
         enabled: group.confirmEnabled
         function _alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
@@ -354,8 +398,35 @@ Item {
                 group.accepted()
         }
     }
+    // Material 2: the round confirm button (the Clock's), 9 dp above the bottom
+    IconButton {
+        id: _round
+        visible: group.roundConfirm
+        size: group.roundConfirmSize
+        variant: "filled"
+        x: (group.width - width) / 2
+        y: group.height - group.roundConfirmBottom - height
+        enabled: group.confirmEnabled
+        containerColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContainer)
+            : group.showsNext ? Theme.color.surfaceContainer : group.confirmContainerColor
+        iconColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
+            : group.showsNext ? Theme.color.primary : group.confirmContentColor
+        iconName: group.showsNext ? "ios-arrow-forward" : "ms-check"
+        function _a(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+        Accessible.name: group.showsNext ? qsTr("Next") : qsTr("Confirm")
+        onClicked: {
+            if (group.showsNext)
+                group.advance()
+            else
+                group.accepted()
+        }
+    }
     /*! The edge button (for tests and callers). */
     readonly property alias button: _button
+    /*! The round confirm button of the Material 2 picker. */
+    readonly property alias roundButton: _round
+    /*! The confirm button in use: \l roundButton or \l button. */
+    readonly property Item confirmButton: roundConfirm ? _round : _button
     /*! The heading label. */
     readonly property alias headingItem: _heading
     /*! The row of columns. */

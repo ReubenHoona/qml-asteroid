@@ -91,16 +91,16 @@ PickerGroup {
     // the Settings number picker dialog style (not the duration picker,
     // which is the Clock timer's TimePicker style)
     headingRole: duration ? "titleMedium" : "bodySmall"
-    headingColor: duration ? Theme.color.primary : Theme.color.onBackground
+    headingColor: duration ? (_m2 ? Theme.color.secondary : Theme.color.primary) : Theme.color.onBackground
     headingHeight: duration ? Theme.dp(24) : Theme.type.bodySmall.lineHeight
     headingSide: duration ? Theme.dp(Math.ceil(Theme.screenWidthDp * 30 / 100)) : 0
     optionRole: duration ? "numeralSmall" : "displaySmall"
     optionHeight: duration ? Theme.dp(36) : Theme.type.displaySmall.lineHeight
     optionSpacing: duration ? Theme.dp(4) : 0
     optionFeatures: duration ? Theme.tabularNumerals : ({})
-    unselectedColor: duration ? Theme.color.secondaryDim : Theme.color.onBackground
+    unselectedColor: duration && !_m2 ? Theme.color.secondaryDim : Theme.color.onBackground
     confirmFocusable: duration
-    confirmContainerColor: duration ? Theme.color.primaryDim : Theme.color.primary
+    confirmContainerColor: duration && !_m2 ? Theme.color.primaryDim : Theme.color.primary
     confirmContentColor: Theme.color.onPrimary
     separatorText: duration ? ":" : ""
     columnSpacing: Theme.dp(8)

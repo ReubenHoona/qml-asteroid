@@ -30,7 +30,9 @@ import org.asteroid.controls
    of the 21 type roles (\c titleMedium, \c labelMedium, \c numeralLarge...).
    A caller's own font.pixelSize keeps Qt's natural line spacing and no
    tracking (as before); a caller's proportional lineHeight (a ratio below
-   4), font.bold and font.weight keep working.
+   4), font.bold and font.weight keep working. \c weight draws the role in
+   another weight (font.weight cannot ask for 400: that is Qt's unset
+   weight, which the role then replaces).
 
    Here is a short example that shows some text in a blue rectangle on a yellow background:
 
@@ -101,7 +103,13 @@ Text {
      * QFont weight and a binding would overwrite them. A weight a caller
      * changed is left alone from then on.
      */
-    readonly property int _roleWeight: _role.weight
+    /*!
+        A weight to draw the role in instead of its own (100 ... 900; Bold
+        text is added as for the roles); 0, the default, keeps the role's.
+        A caller's font.weight or font.bold still wins over both.
+    */
+    property int weight: 0
+    readonly property int _roleWeight: weight > 0 ? Theme.weight(weight) : _role.weight
     property int _appliedWeight: -1
     function _applyWeight() {
         if (_appliedWeight === -2)
