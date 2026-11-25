@@ -95,8 +95,8 @@ PickerGroup {
     headingHeight: duration ? Theme.dp(24) : Theme.type.bodySmall.lineHeight
     headingSide: duration ? Theme.dp(Math.ceil(Theme.screenWidthDp * 30 / 100)) : 0
     optionRole: duration ? "numeralSmall" : "displaySmall"
-    optionHeight: duration ? Theme.dp(36) : Theme.type.displaySmall.lineHeight
-    optionSpacing: duration ? Theme.dp(4) : 0
+    optionHeight: duration ? (_m2 ? Theme.dp(32) : Theme.dp(36)) : Theme.type.displaySmall.lineHeight
+    optionSpacing: duration ? (_m2 ? Theme.dp(2) : Theme.dp(4)) : 0
     optionFeatures: duration ? Theme.tabularNumerals : ({})
     unselectedColor: duration && !_m2 ? Theme.color.secondaryDim : Theme.color.onBackground
     confirmFocusable: duration

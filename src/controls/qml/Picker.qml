@@ -115,6 +115,16 @@ Item {
     property bool showNeighbours: true
     /*! The options' weight; 0: the role's (Label.weight). */
     property int optionWeight: 0
+    /*! The Material 2 picker's neighbours (the Clock, S29-c): one pitch
+        from the centre an option is drawn at this width and height scale
+        (0.89 and 0.75), linearly in between, about its own centre, in place
+        of the CP3A edge scaling; negative (the default): the CP3A scaling. */
+    property real neighbourXScale: -1
+    property real neighbourYScale: -1
+    /*! The selected option's centre below the view's centre (px); the
+        fades stay at the view's edges. */
+    property real centerOffset: 0
+    readonly property bool _flatScaling: neighbourXScale >= 0 && neighbourYScale >= 0
 
     /*! The view the crown turns (RotaryInput steps it). */
     readonly property alias view: _lv
@@ -213,8 +223,8 @@ Item {
         anchors.fill: parent
         clip: true
         spacing: picker.optionSpacing
-        preferredHighlightBegin: height / 2 - picker.optionHeight / 2
-        preferredHighlightEnd: height / 2 + picker.optionHeight / 2
+        preferredHighlightBegin: height / 2 - picker.optionHeight / 2 + picker.centerOffset
+        preferredHighlightEnd: height / 2 + picker.optionHeight / 2 + picker.centerOffset
         highlightRangeMode: ListView.StrictlyEnforceRange
         snapMode: ListView.SnapToItem
         highlightMoveDuration: picker._instant ? 0 : Motion.duration(picker.stepDuration)
@@ -230,6 +240,17 @@ Item {
             font.features: picker.fontFeatures
             color: invalid ? picker.invalidColor : isCurr ? picker.contentColor : picker.neighbourColor
             visible: isCurr || picker.showNeighbours
+            // Material 2: no edge scaling; the neighbours' own scale below
+            edgeScale: picker._flatScaling ? 1 : 0.45
+            /*! 0 at the selected place, 1 a pitch or more away (Material 2). */
+            readonly property real neighbourFraction: !picker._flatScaling || !_view ? 0
+                : Math.min(1, Math.abs(_top + height / 2 - (_view.height / 2 + picker.centerOffset)) / picker.pitch)
+            transform: Scale {
+                origin.x: width / 2
+                origin.y: height / 2
+                xScale: picker._flatScaling ? 1 - (1 - picker.neighbourXScale) * neighbourFraction : 1
+                yScale: picker._flatScaling ? 1 - (1 - picker.neighbourYScale) * neighbourFraction : 1
+            }
             // in the delegate, so the view keeps its drags (the view steals
             // the grab past the drag threshold)
             TapHandler {

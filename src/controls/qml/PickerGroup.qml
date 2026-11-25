@@ -54,16 +54,22 @@ import org.asteroid.controls
     Alarm):
     \list
     \li heading secondary #FDE293 (titleMedium, weight 500);
-    \li the focused column's value and its neighbours (scaled and faded as
-        before) in secondary #FDE293;
+    \li the focused column's value and its neighbours in secondary
+        #FDE293: the column 200 px tall from y 61 to 262 (S29-c at rest:
+        the 33 % fades run from y 62 to 128 and from 196 to 262), the
+        selected value 2.5 dp under its centre (cap rows 141-184), the
+        neighbours 68 px away (34 dp pitch: 32 dp options, 2 dp apart) at
+        0.89 x 0.75 scale ('06' x 41-97, rows 79-111 under '07' x 37-100,
+        rows 141-184);
     \li the other columns only their value, in #FFFFFF (onBackground), no
         neighbours;
     \li separators #FFFFFF; options weight 400 (\l optionWeight);
-    \li a round 52 dp filled button (\l roundConfirm) centred 9 dp above
-        the bottom (the disc x 140-243, y 262-365) in place of the edge
-        button: \l confirmContainerColor (Material 2 primary #AECBFA; the
-        Timer and the Alarm set #FFFFFF) with an onPrimary #303133 26 dp
-        check (ink 34 x 25 px); the columns end 4 dp above it.
+    \li a round 52 dp filled button (\l roundConfirm) centred 8.5 dp above
+        the bottom (the disc y 263-366, between S28-c's 262-365 and S29-c's
+        264-367; x 140-243) in place of the edge button:
+        \l confirmContainerColor (Material 2 primary #AECBFA; the Timer and
+        the Alarm set #FFFFFF) with an onPrimary #303133 26 dp check (ink
+        34 x 25 px).
     \endlist
 
     \l columns is a list of column descriptions:
@@ -122,8 +128,8 @@ Item {
     /*! The columns' option style (see \l Picker): role, height, spacing,
         OpenType features. */
     property string optionRole: "numeralSmall"
-    property real optionHeight: Theme.dp(36)
-    property real optionSpacing: Theme.dp(4)
+    property real optionHeight: _m2 ? Theme.dp(32) : Theme.dp(36)
+    property real optionSpacing: _m2 ? Theme.dp(2) : Theme.dp(4)
     property var optionFeatures: Theme.tabularNumerals
     /*! The options' weight; 0: the role's. 400 in Material 2 (the Clock's
         regular digits, whatever the role). */
@@ -144,9 +150,22 @@ Item {
     property color confirmContentColor: Theme.color.onPrimary
     /*! A round 52 dp confirm button in place of the edge button (Material 2). */
     property bool roundConfirm: _m2
-    /*! The round button's size and its space to the bottom: 52 dp, 9 dp. */
+    /*! The round button's size and its space to the bottom: 52 dp, 8.5 dp. */
     readonly property real roundConfirmSize: Theme.size.iconButton
-    readonly property real roundConfirmBottom: Theme.dp(9)
+    readonly property real roundConfirmBottom: Theme.dp(8.5)
+    /*! The columns' top and their bottom's distance from the group's
+        bottom (px). CP3A: under the heading band and 4 dp over the edge
+        button. Material 2 (S29-c): from y 61 (30.5 dp) to y 262 (61 dp
+        above the bottom), through the heading band; the fades keep the
+        heading clear. */
+    property real columnsTop: _m2 ? Theme.dp(30.5) : headingTop + headingHeight + sectionPadding
+    property real columnsBottomMargin: _m2 ? Theme.dp(61)
+        : sectionPadding + buttonHeight + Theme.size.edgeButtonBottomGap
+    /*! Material 2: the neighbours' scale one pitch away (\l Picker) and the
+        selected value 2.5 dp under the columns' centre. */
+    property real neighbourXScale: _m2 ? 0.89 : -1
+    property real neighbourYScale: _m2 ? 0.75 : -1
+    property real centerOffset: _m2 ? Theme.dp(2.5) : 0
     /*! Padding above and below the columns: 4 dp. */
     readonly property real sectionPadding: Theme.dp(4)
     /*! Edge button height: 56 dp. */
@@ -288,11 +307,9 @@ Item {
 
     Item {
         id: _area
-        y: group.headingTop + group.headingHeight + group.sectionPadding
+        y: group.columnsTop
         width: group.width
-        height: Math.max(0, group.height - y - group.sectionPadding
-                         - (group.roundConfirm ? group.roundConfirmSize + group.roundConfirmBottom
-                                               : group.buttonHeight + Theme.size.edgeButtonBottomGap))
+        height: Math.max(0, group.height - y - group.columnsBottomMargin)
 
         Row {
             id: _row
@@ -325,6 +342,8 @@ Item {
                         height: parent.height
                         Label {
                             anchors.centerIn: parent
+                            // level with the selected values
+                            anchors.verticalCenterOffset: group.centerOffset
                             width: group.separatorWidth
                             visible: _col.separator !== ""
                             text: _col.separator
@@ -353,6 +372,9 @@ Item {
                         unselectedColor: group.unselectedColor
                         optionWeight: group.optionWeight
                         showNeighbours: focused || group.unfocusedNeighbours
+                        neighbourXScale: group.neighbourXScale
+                        neighbourYScale: group.neighbourYScale
+                        centerOffset: group.centerOffset
                         Accessible.name: _col.modelData.label
                         Component.onCompleted: {
                             if (_col.modelData.initial)
@@ -398,7 +420,7 @@ Item {
                 group.accepted()
         }
     }
-    // Material 2: the round confirm button (the Clock's), 9 dp above the bottom
+    // Material 2: the round confirm button (the Clock's), 8.5 dp above the bottom
     IconButton {
         id: _round
         visible: group.roundConfirm
