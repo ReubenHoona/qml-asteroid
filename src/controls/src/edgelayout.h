@@ -165,8 +165,14 @@ public:
     QQuickItem *flickable() const { return m_flickable; }
 
 public slots:
+    /* now: the list moved (contentY, height) */
     void relayout();
+    /* once, before the next frame is synchronised (after the polish that
+     * places the items): rows added, removed, moved or resized */
     void scheduleRelayout();
+
+private slots:
+    void flushScheduled();
 
 private:
     explicit EdgePacker(QQuickItem *flickable);

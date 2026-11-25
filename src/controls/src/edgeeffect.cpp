@@ -59,7 +59,7 @@ void EdgeEffect::setPacked(bool packed)
     m_packed = packed;
     emit specChanged();
     if (m_packer)
-        m_packer->relayout();
+        m_packer->scheduleRelayout();
     update();
 }
 
@@ -253,7 +253,8 @@ void EdgeEffect::updateContentHeight()
 void EdgeEffect::update()
 {
     if (driven()) {
-        m_packer->relayout();
+        /* a row moved, resized or changed: all rows again before the frame */
+        m_packer->scheduleRelayout();
         return;
     }
     qreal scale = 1;

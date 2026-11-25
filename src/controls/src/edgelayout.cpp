@@ -10,6 +10,7 @@
 #include <QHash>
 #include <QMetaObject>
 #include <QQuickItem>
+#include <QQuickWindow>
 #include <QtMath>
 #include <algorithm>
 
@@ -291,8 +292,9 @@ QVariantList EdgeLayout::layout(const QVariantMap &spec, const QVariantList &top
 
 static QHash<QQuickItem *, EdgePacker *> &packers()
 {
-    static QHash<QQuickItem *, EdgePacker *> all;
-    return all;
+    /* never freed: a Flickable may go after static destruction at exit */
+    static QHash<QQuickItem *, EdgePacker *> *all = new QHash<QQuickItem *, EdgePacker *>;
+    return *all;
 }
 
 EdgePacker *EdgePacker::forFlickable(QQuickItem *flickable)
@@ -311,9 +313,9 @@ EdgePacker::EdgePacker(QQuickItem *flickable) : QObject(flickable),
 {
     connect(flickable, SIGNAL(contentYChanged()), this, SLOT(relayout()));
     connect(flickable, &QQuickItem::heightChanged, this, &EdgePacker::relayout);
-    connect(flickable, &QQuickItem::visibleChanged, this, &EdgePacker::relayout);
+    connect(flickable, &QQuickItem::visibleChanged, this, &EdgePacker::scheduleRelayout);
     connect(flickable, &QQuickItem::windowChanged, this, &EdgePacker::scheduleRelayout);
-    connect(ReduceMotion::instance(), &ReduceMotion::changed, this, &EdgePacker::relayout);
+    connect(ReduceMotion::instance(), &ReduceMotion::changed, this, &EdgePacker::scheduleRelayout);
 }
 
 EdgePacker::~EdgePacker()
@@ -328,7 +330,7 @@ void EdgePacker::add(EdgeEffect *effect)
             return;
     }
     m_effects << effect;
-    relayout();
+    scheduleRelayout();
 }
 
 void EdgePacker::remove(EdgeEffect *effect)
@@ -339,15 +341,27 @@ void EdgePacker::remove(EdgeEffect *effect)
     scheduleRelayout();
 }
 
+/* A page of rows completes, a Column or ListView places its items: one
+ * layout for all of it, in the same frame (afterAnimating comes after the
+ * polish that places them and before the scene is synchronised), or a
+ * queued call when no frame is coming (no frame is asked for: the values
+ * that change ask for one themselves) */
 void EdgePacker::scheduleRelayout()
 {
     if (m_scheduled)
         return;
     m_scheduled = true;
-    QMetaObject::invokeMethod(this, [this]() {
-        m_scheduled = false;
-        relayout();
-    }, Qt::QueuedConnection);
+    if (QQuickWindow *w = m_flickable ? m_flickable->window() : nullptr)
+        connect(w, &QQuickWindow::afterAnimating, this, &EdgePacker::flushScheduled, Qt::UniqueConnection);
+    QMetaObject::invokeMethod(this, &EdgePacker::flushScheduled, Qt::QueuedConnection);
+}
+
+void EdgePacker::flushScheduled()
+{
+    if (!m_scheduled)
+        return;
+    m_scheduled = false;
+    relayout();
 }
 
 void EdgePacker::relayout()
@@ -357,6 +371,8 @@ void EdgePacker::relayout()
         return;
     }
     m_busy = true;
+    /* this layout is the one a schedule asked for */
+    m_scheduled = false;
     int rounds = 0;
     do {
         m_again = false;
