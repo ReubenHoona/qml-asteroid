@@ -22,20 +22,27 @@ import org.asteroid.controls
     \qmltype SwitchButton
     \inqmlmodule org.asteroid.controls
 
-    \brief The Wear OS switch row: a button whose container, label and icon
-    change with its \l Switch.
+    \brief The Wear OS switch row: a button with a \l Switch whose checked
+    state lays a gradient over the row.
 
-    Stock (SwitchButtonTokens.java:50-97, SwitchButtonDefaults.java:11):
+    The Wear OS 6 emulator (Settings S18-b, S20, S20-b, S21, S23, S23-b,
+    S24; Alarm S29-b in Material 2):
     \list
-    \li On: container primaryContainer, label onPrimaryContainer, second line
-        onPrimaryContainer at 90 %, icon primary.
-    \li Off: container surfaceContainer, label onSurface, second line
-        onSurfaceVariant, icon primary.
-    \li Disabled: container onSurface at 12 %, content onSurface at 38 %.
-    \li Padding 14/8/14/8 dp; the switch in a 32 x 24 dp slot 6 dp after the
-        label; colours change with the slow effects spring (about 412 ms).
-    \li Tapping toggles \l checked and plays the toggle haptic (TOGGLE_ON /
-        TOGGLE_OFF) when the Haptics vocabulary has it.
+    \li The container stays surfaceContainer; checked, the row's gradient
+        (\l{Button}{checkedGradient}: primary from 0 at the top left to
+        32.5 % at the bottom right, #35363D at x 30 and #636671 at x 355 on
+        #2F3036) comes in on the slow effects spring (about 412 ms), and the
+        label stays onSurface.
+    \li Second line and icon primary ('Will turn on at 10%' #DBE2F9); the
+        content colour (onSurface) in a Material 2 application.
+    \li Disabled: the container stays, label, second line and icon
+        #80868B (S23-b).
+    \li The small switch (24 x 10 dp track, 14 dp thumb) in a 24 dp slot
+        6 dp after the label and 14 dp from the end (its right end 28 px in
+        from the row's end); its track lies translucent over the gradient.
+    \li Padding 14/8/14/8 dp. Tapping toggles \l checked and plays the
+        toggle haptic (TOGGLE_ON / TOGGLE_OFF) when the Haptics vocabulary
+        has it.
     \endlist
 
     \qml
@@ -54,22 +61,28 @@ Button {
     variant: "tonal"
     verticalPadding: Theme.space.m
     maximumLineCount: 3
-    trailingWidth: Theme.dp(32)
+    trailingWidth: Theme.size.switchTrackWidth
 
-    readonly property color _checkedContainer: Theme.color.primaryContainer
-    readonly property color _checkedContent: Theme.color.onPrimaryContainer
+    containerColor: Theme.color.surfaceContainer
+    contentColor: !enabled ? Theme.color.disabledContentFlat : Theme.color.onSurface
+    secondaryContentColor: !enabled ? Theme.color.disabledContentFlat
+        : _m2 ? contentColor : Theme.color.primary
+    iconColor: !enabled ? Theme.color.disabledContentFlat
+        : _m2 ? contentColor : Theme.color.primary
 
-    containerColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContainer)
-        : checked ? _checkedContainer : Theme.color.surfaceContainer
-    contentColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
-        : checked ? _checkedContent : Theme.color.onSurface
-    secondaryContentColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
-        : checked ? _a(_checkedContent, Theme.alpha.secondaryOnChecked) : Theme.color.onSurfaceVariant
-    iconColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent) : Theme.color.primary
+    // the gradient on the slow effects spring (stiffness 260, about 412 ms)
+    // (written by the spring below, which sets the first value as it is: no binding here)
+    WearSpring {
+        target: row
+        property: "checkedGradient"
+        to: row.checked ? 1 : 0
+        stiffness: Motion.standard.slowEffects.stiffness
+        dampingRatio: 1.0
+        visibilityThreshold: 0.001
+    }
 
     // the slow effects spring: stiffness 260, about 412 ms
     readonly property int colorDuration: Motion.springDuration(Motion.standard.slowEffects.stiffness)
-    Behavior on containerColor { ColorAnimation { duration: row.colorDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.springEasing } }
     Behavior on contentColor { ColorAnimation { duration: row.colorDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.springEasing } }
     Behavior on secondaryContentColor { ColorAnimation { duration: row.colorDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.springEasing } }
 
@@ -84,11 +97,16 @@ Button {
         toggled(checked)
     }
 
+    /*! The switch (for tests). */
+    readonly property alias switchItem: _switch
+
     Switch {
         id: _switch
         anchors.centerIn: parent
         checked: row.checked
         enabled: row.enabled
         toggleOnClick: false
+        // translucent over the row and its gradient, as stock
+        containerColor: "transparent"
     }
 }

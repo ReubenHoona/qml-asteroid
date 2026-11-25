@@ -499,6 +499,9 @@ QtObject {
         /*! Captions: plain explanation text and footnotes between rows (the
             Wear OS 6 emulator's Settings S20-b, S21-b, S23-b: #9AA0A6). */
         property color caption: "#9AA0A6"
+        /*! Disabled text and icons on a row that keeps its container (the
+            Wear OS 6 emulator S23-b: 'Set time / 6:58 PM' #80868B on #2F3036). */
+        property color disabledContentFlat: "#80868B"
         /*! The scrim behind the time text: black at 0.85 (TimeTextKt.java:89-90). */
         property color timeTextScrim: Qt.rgba(0, 0, 0, 0.85)
         /*! Scroll indicator thumb / track: tone 80 / tone 20 (ScrollIndicatorKt.java:269-273). */
@@ -781,6 +784,10 @@ QtObject {
         readonly property real secondaryOnFilled: 0.8
         /*! Secondary label on a checked switch row (SwitchButtonTokens). */
         readonly property real secondaryOnChecked: 0.9
+        /*! A checked toggle row's gradient: primary at 32.5 % in the far corner
+            (Wear Material 2 ToggleChip checkedEndBackgroundColor; the Wear OS 6
+            emulator S18-b, S21, S23 fit 0.325 best). */
+        readonly property real checkedGradient: 0.325
         /*! Slider unselected bar (SliderTokens). */
         readonly property real sliderUnselected: 0.3
         /*! Unselected page dots and the page indicator band (PageIndicator.kt). */

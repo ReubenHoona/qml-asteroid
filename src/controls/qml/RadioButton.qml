@@ -38,6 +38,14 @@ import org.asteroid.controls
     \li A tap selects (never unselects) and plays the select haptic
         (CONTEXT_CLICK) when the Haptics vocabulary has it.
     \endlist
+
+    In a Material 2 application (\l{Theme}{Theme.materialVersion} 2) the
+    row is a Wear Material 2 toggle chip, as \l SwitchButton there: the
+    container stays surfaceContainer with the checked gradient
+    (\l{Button}{checkedGradient}), label, second line and icon onSurface
+    (#80868B disabled); ring and dot secondary when selected, onSurface at
+    60 % when not. No emulator capture shows a radio row, so the Material 3
+    row keeps the CP3A look.
 */
 Button {
     id: row
@@ -63,16 +71,30 @@ Button {
     maximumLineCount: 3
     trailingWidth: Theme.dp(32)
 
-    containerColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContainer)
+    containerColor: _m2 ? Theme.color.surfaceContainer
+        : !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContainer)
         : checked ? Theme.color.primaryContainer : Theme.color.surfaceContainer
-    contentColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
+    contentColor: _m2 ? (enabled ? Theme.color.onSurface : Theme.color.disabledContentFlat)
+        : !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
         : checked ? Theme.color.onPrimaryContainer : Theme.color.onSurface
-    secondaryContentColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
+    secondaryContentColor: _m2 ? contentColor
+        : !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent)
         : checked ? _a(Theme.color.onPrimaryContainer, Theme.alpha.secondaryOnChecked) : Theme.color.onSurfaceVariant
-    iconColor: !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent) : Theme.color.primary
-    /*! Ring and dot colour. */
+    iconColor: _m2 ? contentColor
+        : !enabled ? _a(Theme.color.onSurface, Theme.alpha.disabledContent) : Theme.color.primary
+    // Material 2: the checked gradient on the slow effects spring, as SwitchButton
+    WearSpring {
+        target: row
+        property: "checkedGradient"
+        to: row._m2 && row.checked ? 1 : 0
+        stiffness: Motion.standard.slowEffects.stiffness
+        dampingRatio: 1.0
+        visibilityThreshold: 0.001
+    }
+    /*! Ring and dot colour (Material 2: secondary selected, onSurface 60 % not). */
     readonly property color controlColor: !enabled ? _a(Theme.color.onSurface, 0.12)
-        : checked ? Theme.color.primary : Theme.color.outline
+        : checked ? (_m2 ? Theme.color.secondary : Theme.color.primary)
+        : _m2 ? _a(Theme.color.onSurface, 0.6) : Theme.color.outline
 
     readonly property int colorDuration: Motion.springDuration(Motion.standard.slowEffects.stiffness)
     Behavior on containerColor { ColorAnimation { duration: row.colorDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Motion.springEasing } }
