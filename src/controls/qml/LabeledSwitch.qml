@@ -70,6 +70,8 @@ ListRow {
             id: toggle
             anchors.centerIn: parent
             toggleOnClick: false
+            // the track over the row's own colour
+            containerColor: "transparent"
         }
     }
 }

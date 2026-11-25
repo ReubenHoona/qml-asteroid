@@ -17,33 +17,42 @@
  */
 
 import QtQuick
-import QtQuick.Shapes
 import org.asteroid.controls
 
 /*!
     \qmltype Switch
     \inqmlmodule org.asteroid.controls
 
-    \brief The Wear OS Material 3 switch.
+    \brief The Wear OS switch: the small switch of the Wear OS 6 emulator.
 
-    Stock (SwitchButtonKt.java:144,160, SwitchButtonTokens.java:50-97):
-    a fully round 32 x 22 dp track (64 x 44 px) with a 2 dp border.
+    The Wear OS 6 emulator (BP2A.250605; Settings S18-b, S20-b, S21, S23,
+    S24 and the Clock's alarm list S29-b, S29-d, measured from the PNGs):
     \list
-    \li Off: track surfaceContainer, border outline, a 12 dp (24 px) thumb in
-        outline, its centre 11 dp (22 px) from the start.
-    \li On: track and border primary, an 18 dp (36 px) thumb in
-        primaryContainer, its centre 21 dp (42 px) from the start, and a check
-        mark in primary: strokes (7.4,13)-(9.9,15.5) and (10.5,15.1)-(16.5,9.1)
-        dp in a 24 dp box centred on the thumb, 2 dp round caps, scaled by
-        1 - (1 - p)^3.
+    \li A fully round 24 x 10 dp track (48 x 20 px) and a 14 dp (28 px)
+        thumb that fills the track ends: its centre 7 dp (14 px) from the
+        start of the track when off and 17 dp (34 px) when on, so it stands
+        4 px over the track above and below. No border, no tick.
+    \li A shadow under the thumb: black at 20 %, 1 dp lower (the 2 px
+        crescent under every stock thumb, 20 % darker than the row).
+    \li Material 3 (Settings): on, the thumb tertiary #D4C7FF and the track
+        tertiary at 38 % (#8985A1 on the checked row's gradient); off, the
+        thumb #8B8B8F and the track onSurface at 38 % (#74757C on #2F3036).
+    \li Material 2 (\l{Theme}{Theme.materialVersion} 2, the Alarm list): on,
+        the thumb secondary #FDE293 and the track secondary at 38 %
+        (#8A8164 on the #454648 segment); off, the thumb #999999 and the
+        track onSurface at 38 % (#8B8C8D on #454648).
+    \li Disabled: thumb and track onSurface at 12 %, no shadow.
     \li One transition, the fast effects spring (stiffness 1400, about
-        177 ms), drives size, position and tick.
-    \li Disabled: track and border onSurface at 12 %, thumb onSurface at 12 %
-        (off) or background at 38 % (on), tick onSurface at 12 %.
+        177 ms), slides the thumb and mixes the colours.
     \endlist
 
-    The control sits in a 32 x 24 dp slot (64 x 48 px, the implicit size).
-    Tapping it toggles \l checked, as before; in a row, use \l SwitchButton.
+    The track's 38 % lies over \l containerColor, the fill under the switch
+    (surfaceContainer by default; a row passes its own). With
+    \c "transparent" the track is drawn translucent over whatever is under
+    the switch, as stock does on the checked row's gradient.
+
+    The control is 24 x 14 dp (48 x 28 px, the implicit size). Tapping it
+    toggles \l checked, as before; in a row, use \l SwitchButton.
 
     \qml
     Switch { checked: true }
@@ -56,6 +65,9 @@ Item {
     property bool checked: false
     /*! Toggle on tap (off when a row handles the taps). */
     property bool toggleOnClick: true
+    /*! The fill under the switch, which the track's 38 % lies over:
+        surfaceContainer; "transparent" for a translucent track. */
+    property color containerColor: Theme.color.surfaceContainer
     /*! Animation progress, 0 (off) to 1 (on). */
     // (written by the spring below, which sets the first value as it is: no binding here)
     property real progress: 0
@@ -72,24 +84,35 @@ Item {
 
     function _a(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
     function _mix(a, b, t) { return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t) }
+    // a colour at alpha a over the container (translucent without one)
+    function _over(c, a) { return containerColor.a > 0 ? Qt.tint(containerColor, _a(c, a)) : _a(c, a) }
+
+    readonly property bool _m2: Theme.materialVersion === 2
 
     readonly property real trackWidth: Theme.size.switchTrackWidth
     readonly property real trackHeight: Theme.size.switchTrackHeight
     readonly property real borderWidth: Theme.size.switchTrackBorder
     readonly property real thumbSize: Theme.size.switchThumbOff + (Theme.size.switchThumbOn - Theme.size.switchThumbOff) * progress
-    /*! Thumb centre from the start of the track: 11 dp off, 21 dp on. */
-    readonly property real thumbCenter: Theme.dp(11) + Theme.dp(10) * progress
+    /*! Thumb centre from the start of the track: 7 dp off, 17 dp on (the
+        thumb fills the track ends). */
+    readonly property real thumbCenter: thumbSize / 2 + (trackWidth - thumbSize) * progress
 
-    readonly property color _offTrack: enabled ? Theme.color.surfaceContainer : "transparent"
-    readonly property color _onTrack: enabled ? Theme.color.primary : _a(Theme.color.onSurface, 0.12)
-    readonly property color _offBorder: enabled ? Theme.color.outline : _a(Theme.color.onSurface, 0.12)
-    readonly property color _onBorder: enabled ? Theme.color.primary : _a(Theme.color.onSurface, 0.12)
-    readonly property color _offThumb: enabled ? Theme.color.outline : _a(Theme.color.onSurface, 0.12)
-    readonly property color _onThumb: enabled ? Theme.color.primaryContainer : _a(Theme.color.background, 0.38)
-    readonly property color tickColor: enabled ? Theme.color.primary : _a(Theme.color.onSurface, 0.12)
+    /*! The on colour: tertiary (Material 3) or secondary (Material 2). */
+    readonly property color onColor: _m2 ? Theme.color.secondary : Theme.color.tertiary
+    /*! The off thumb: #8B8B8F (Material 3, S20-b, S24) or #999999 (Material 2, S29-d). */
+    readonly property color offThumbColor: _m2 ? "#999999" : "#8B8B8F"
 
-    implicitWidth: Theme.dp(32)
-    implicitHeight: Theme.dp(24)
+    readonly property color _disabled: _a(Theme.color.onSurface, 0.12)
+    readonly property color _offTrack: enabled ? _over(Theme.color.onSurface, 0.38) : _disabled
+    readonly property color _onTrack: enabled ? _over(onColor, 0.38) : _disabled
+    readonly property color _offThumb: enabled ? offThumbColor : _disabled
+    readonly property color _onThumb: enabled ? onColor : _disabled
+    /*! The track and thumb colours now. */
+    readonly property color trackColor: _mix(_offTrack, _onTrack, progress)
+    readonly property color thumbColor: _mix(_offThumb, _onThumb, progress)
+
+    implicitWidth: trackWidth
+    implicitHeight: Theme.size.switchThumbOn
     width: implicitWidth
     height: implicitHeight
 
@@ -108,9 +131,20 @@ Item {
         height: control.trackHeight
         anchors.centerIn: parent
         radius: height / 2
-        color: control._mix(control._offTrack, control._onTrack, control.progress)
+        color: control.trackColor
         border.width: control.borderWidth
-        border.color: control._mix(control._offBorder, control._onBorder, control.progress)
+        border.color: color
+
+        Rectangle {
+            id: shadow
+            visible: control.enabled
+            x: thumb.x
+            y: thumb.y + Theme.dp(1)
+            width: thumb.width
+            height: width
+            radius: width / 2
+            color: Qt.rgba(0, 0, 0, 0.2)
+        }
 
         Rectangle {
             id: thumb
@@ -120,31 +154,8 @@ Item {
             // from the start of the track: the right in a right to left layout
             x: control.LayoutMirroring.enabled ? track.width - control.thumbCenter - width / 2
                                                : control.thumbCenter - width / 2
-            anchors.verticalCenter: parent.verticalCenter
-            color: control._mix(control._offThumb, control._onThumb, control.progress)
-        }
-
-        Shape {
-            id: tick
-            // a 24 dp box centred on the thumb
-            width: Theme.dp(24)
-            height: width
-            x: control.LayoutMirroring.enabled ? track.width - control.thumbCenter - width / 2
-                                               : control.thumbCenter - width / 2
-            anchors.verticalCenter: parent.verticalCenter
-            readonly property real p: control.progress
-            scale: 1 - Math.pow(1 - p, 3)
-            visible: p > 0
-            ShapePath {
-                strokeWidth: Theme.size.switchTickStroke
-                strokeColor: control.tickColor
-                fillColor: "transparent"
-                capStyle: ShapePath.RoundCap
-                PathMove { x: Theme.dp(7.4); y: Theme.dp(13) }
-                PathLine { x: Theme.dp(9.9); y: Theme.dp(15.5) }
-                PathMove { x: Theme.dp(10.5); y: Theme.dp(15.1) }
-                PathLine { x: Theme.dp(16.5); y: Theme.dp(9.1) }
-            }
+            y: (track.height - height) / 2
+            color: control.thumbColor
         }
     }
 

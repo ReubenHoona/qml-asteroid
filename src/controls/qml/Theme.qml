@@ -848,12 +848,14 @@ QtObject {
             return theme.dp(58) + 1.42 * (h - theme.dp(46))
         }
 
-        // SwitchButton (SwitchButtonKt.java:144,160)
-        readonly property real switchTrackWidth: theme.dp(32)
-        readonly property real switchTrackHeight: theme.dp(22)
-        readonly property real switchTrackBorder: theme.dp(2)
-        readonly property real switchThumbOff: theme.dp(12)
-        readonly property real switchThumbOn: theme.dp(18)
+        // Switch: the Wear OS 6 emulator's small switch (S18-b, S20-b, S29-b,
+        // S29-d): a 24 x 10 dp track without a border, a 14 dp thumb on and off
+        readonly property real switchTrackWidth: theme.dp(24)
+        readonly property real switchTrackHeight: theme.dp(10)
+        readonly property real switchTrackBorder: 0
+        readonly property real switchThumbOff: theme.dp(14)
+        readonly property real switchThumbOn: theme.dp(14)
+        // the CP3A tick stroke (no tick on the small switch)
         readonly property real switchTickStroke: theme.dp(2)
 
         // RadioButton (RadioButtonKt.java:348-352,423)
