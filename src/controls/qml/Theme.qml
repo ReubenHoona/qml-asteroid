@@ -514,6 +514,10 @@ QtObject {
         property color scrollTrackSystem: "#4D4D4D"
         /*! Slider track on a surface: black 30 % over surfaceContainer (SliderTokens). */
         property color sliderTrackOnSurface: "#212226"
+        /*! InlineSlider: the unselected bar and the selected part (the Wear
+            OS 6 emulator S24: #202124 and tertiary #D4C7FF). */
+        property color sliderTrack: "#202124"
+        property color sliderFill: tertiary
         /*! The quick settings battery button while Battery Saver is on. */
         property color batterySaver: "#FEE170"
         /*! Phone call buttons and their glyphs (Phone 164.0; calls E09). A

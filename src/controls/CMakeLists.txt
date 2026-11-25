@@ -100,6 +100,7 @@ set(controls
         ProgressDialog
         Placeholder
         Stepper
+        InlineSlider
         SwipeToReveal
         ScrollAway
         LoadingRow
