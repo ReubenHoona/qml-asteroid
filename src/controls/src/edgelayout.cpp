@@ -150,12 +150,27 @@ EdgeValues EdgeLayout::evaluate(const EdgeSpec &spec, qreal top, qreal h, bool r
     if (reduced || !(h > 0))
         return out;
     const qreal l = progress(spec, top, h);
+    const qreal x = l < 0 ? l + 1 : 1 - l;
     out.l = l;
-    out.x = l < 0 ? l + 1 : 1 - l;
-    out.scale = value(l, spec.scale, spec.easing);
-    out.containerAlpha = value(l, spec.containerAlpha, spec.easing);
-    out.contentAlpha = value(l, spec.contentAlpha, spec.easing);
-    out.sideOffset = spec.hasSideOffset ? value(l, spec.sideOffset, spec.easing) : 0;
+    out.x = x;
+    /* value() for each variable, with one easing for the variables that
+     * share a zone (all of them in SCALING): the same numbers, one bisection */
+    qreal zoneEnter = qQNaN(), zoneExit = qQNaN(), eased = 0;
+    auto mix = [&](const EdgeSpec::Variable &v) {
+        if (v.enter != zoneEnter || v.exit != zoneExit) {
+            zoneEnter = v.enter;
+            zoneExit = v.exit;
+            const qreal zone = v.exit - v.enter;
+            const qreal f = zone != 0 ? clamp01((x - v.enter) / zone) : (x >= v.exit ? 1 : 0);
+            eased = bezier(spec.easing, f);
+        }
+        const qreal edge = l < 0 ? v.top : v.bottom;
+        return (1 - eased) * edge + eased * v.target;
+    };
+    out.scale = mix(spec.scale);
+    out.containerAlpha = mix(spec.containerAlpha);
+    out.contentAlpha = mix(spec.contentAlpha);
+    out.sideOffset = spec.hasSideOffset ? mix(spec.sideOffset) : 0;
     return out;
 }
 
@@ -165,34 +180,34 @@ qreal EdgeLayout::ceilHeight(qreal h, qreal scale)
     return qCeil(h * scale);
 }
 
-QVector<EdgePlace> EdgeLayout::layout(const QVector<const EdgeSpec *> &specs, const QVector<qreal> &tops,
-                                      const QVector<qreal> &hs, const QVector<qreal> &gaps, qreal vh,
-                                      bool reduced, int *anchor)
+int EdgeLayout::layout(const QVector<const EdgeSpec *> &specs, const QVector<qreal> &tops,
+                       const QVector<qreal> &hs, const QVector<qreal> &gaps, qreal vh,
+                       bool reduced, QVector<EdgePlace> &out)
 {
     const int n = tops.size();
-    QVector<EdgePlace> out(n);
-    if (anchor)
-        *anchor = -1;
-    if (n == 0 || !(vh > 0) || hs.size() < n || specs.size() < n)
-        return out;
+    out.resize(n);
+    if (n == 0 || !(vh > 0) || hs.size() < n || specs.size() < n) {
+        for (int i = 0; i < n; i++)
+            out[i] = EdgePlace();
+        return -1;
+    }
     auto gapAt = [&](int i) { return i >= 0 && i < gaps.size() ? gaps[i] : 0; };
     auto eval1 = [&](int i, qreal top, qreal h) { return evaluate(*specs[i], top / vh, h / vh, reduced); };
-    auto placed = [](qreal y, qreal h, const EdgeValues &e, int side) {
-        EdgePlace p;
+    auto placed = [&](int i, qreal y, const EdgeValues &e, int side) {
+        EdgePlace &p = out[i];
         p.y = y;
-        p.height = ceilHeight(h, e.scale);
+        p.height = ceilHeight(hs[i], e.scale);
         p.v = e;
         p.side = side;
-        return p;
+        p.shown = true;
     };
-    auto gone = [](qreal y, const EdgeValues &e, int side) {
-        EdgePlace p;
+    auto gone = [&](int i, qreal y, const EdgeValues &e, int side) {
+        EdgePlace &p = out[i];
         p.y = y;
         p.height = 0;
         p.v = e;
         p.side = side;
         p.shown = false;
-        return p;
     };
     int a = 0;
     qreal best = 1e30;
@@ -203,9 +218,7 @@ QVector<EdgePlace> EdgeLayout::layout(const QVector<const EdgeSpec *> &specs, co
             a = i;
         }
     }
-    if (anchor)
-        *anchor = a;
-    out[a] = placed(tops[a], hs[a], eval1(a, tops[a], hs[a]), 0);
+    placed(a, tops[a], eval1(a, tops[a], hs[a]), 0);
     // downwards from the anchor's bottom
     qreal bottom = out[a].y + out[a].height;
     for (int k = a + 1; k < n; k++) {
@@ -213,10 +226,10 @@ QVector<EdgePlace> EdgeLayout::layout(const QVector<const EdgeSpec *> &specs, co
         const EdgeValues e = eval1(k, top, hs[k]);
         if (top >= vh) {
             for (int r = k; r < n; r++)
-                out[r] = gone(vh + hs[r], e, 1);
+                gone(r, vh + hs[r], e, 1);
             break;
         }
-        out[k] = placed(top, hs[k], e, 1);
+        placed(k, top, e, 1);
         bottom = top + out[k].height;
     }
     // upwards from the anchor's top: the item that ends at `end` is judged as
@@ -226,16 +239,15 @@ QVector<EdgePlace> EdgeLayout::layout(const QVector<const EdgeSpec *> &specs, co
     for (int j = a - 1; j >= 0; j--) {
         const qreal end = start - gapAt(j);
         const EdgeValues e2 = eval1(j, end - hs[j], hs[j]);
-        const qreal h2 = ceilHeight(hs[j], e2.scale);
         if (end <= 0) {
             for (int q = j; q >= 0; q--)
-                out[q] = gone(-hs[q], e2, -1);
+                gone(q, -hs[q], e2, -1);
             break;
         }
-        out[j] = placed(end - h2, hs[j], e2, -1);
+        placed(j, end - ceilHeight(hs[j], e2.scale), e2, -1);
         start = out[j].y;
     }
-    return out;
+    return a;
 }
 
 /* ---- the QML functions ---- */
@@ -267,7 +279,8 @@ QVariantList EdgeLayout::layout(const QVariantMap &spec, const QVariantList &top
     }
     for (int i = 0; i < gaps.size(); i++)
         g[i] = gaps[i].toReal();
-    const QVector<EdgePlace> places = layout(specs, t, h, g, viewportHeight, reduced);
+    QVector<EdgePlace> places;
+    layout(specs, t, h, g, viewportHeight, reduced, places);
     QVariantList out;
     out.reserve(places.size());
     for (const EdgePlace &p : places) {
@@ -308,7 +321,7 @@ EdgePacker::EdgePacker(QQuickItem *flickable) : QObject(flickable),
     m_flickable(flickable), m_key(flickable)
 {
     connect(flickable, SIGNAL(contentYChanged()), this, SLOT(relayout()));
-    connect(flickable, &QQuickItem::heightChanged, this, &EdgePacker::relayout);
+    connect(flickable, &QQuickItem::heightChanged, this, &EdgePacker::viewportResized);
     connect(flickable, &QQuickItem::visibleChanged, this, &EdgePacker::scheduleRelayout);
     connect(flickable, &QQuickItem::windowChanged, this, &EdgePacker::scheduleRelayout);
     connect(ReduceMotion::instance(), &ReduceMotion::changed, this, &EdgePacker::scheduleRelayout);
@@ -333,30 +346,50 @@ void EdgePacker::remove(EdgeEffect *effect)
 {
     m_effects.removeAll(effect);
     m_effects.removeAll(nullptr);
-    /* not now: the effect may be going with its item */
+    /* the rows kept may hold it: they are worked out again before the next
+     * layout; not now, the effect may be going with its item */
     scheduleRelayout();
 }
 
-/* A page of rows completes, a Column or ListView places its items: one
- * layout for all of it, in the same frame (afterAnimating comes after the
- * polish that places them and before the scene is synchronised), or a
- * queued call when no frame is coming (no frame is asked for: the values
- * that change ask for one themselves) */
+/* The rows changed: one rebuild and layout for all of it, in the same frame
+ * (afterAnimating comes after the polish that places them and before the
+ * scene is synchronised), or a queued call when no frame is coming. The
+ * per-frame signal is connected only until then. */
 void EdgePacker::scheduleRelayout()
 {
+    m_dirty = true;
+    if (m_busy) {
+        m_again = true;
+        return;
+    }
     if (m_scheduled)
         return;
     m_scheduled = true;
     if (QQuickWindow *w = m_flickable ? m_flickable->window() : nullptr)
-        connect(w, &QQuickWindow::afterAnimating, this, &EdgePacker::flushScheduled, Qt::UniqueConnection);
+        m_frameHook = connect(w, &QQuickWindow::afterAnimating, this, &EdgePacker::flushScheduled);
     QMetaObject::invokeMethod(this, &EdgePacker::flushScheduled, Qt::QueuedConnection);
 }
 
 void EdgePacker::flushScheduled()
 {
-    if (!m_scheduled)
-        return;
-    m_scheduled = false;
+    if (m_scheduled)
+        relayout();
+    else
+        dropFrameHook();
+}
+
+void EdgePacker::dropFrameHook()
+{
+    if (m_frameHook) {
+        disconnect(m_frameHook);
+        m_frameHook = QMetaObject::Connection();
+    }
+}
+
+void EdgePacker::viewportResized()
+{
+    /* the values follow the viewport's height; who takes part may too */
+    m_dirty = true;
     relayout();
 }
 
@@ -367,52 +400,48 @@ void EdgePacker::relayout()
         return;
     }
     m_busy = true;
-    /* this layout is the one a schedule asked for */
-    m_scheduled = false;
+    if (m_scheduled) {
+        /* this layout is the one the schedule asked for */
+        m_scheduled = false;
+        dropFrameHook();
+    }
     int rounds = 0;
     do {
         m_again = false;
-        doLayout();
+        if (m_dirty)
+            rebuild();
+        place();
     } while (m_again && ++rounds < 4);
     m_busy = false;
 }
 
-void EdgePacker::doLayout()
+void EdgePacker::rebuild()
 {
+    m_dirty = false;
+    m_rows.clear();
     QQuickItem *f = m_flickable;
-    if (!f)
-        return;
-    const QList<QPointer<EdgeEffect>> effects = m_effects;
-    /* nothing to lay out (a page of unpacked effects): no work per move */
-    bool any = false;
-    for (const QPointer<EdgeEffect> &e : effects)
-        any = any || (e && e->m_packed);
-    if (!any)
-        return;
-    /* the items that carry an effect, in the order the effects joined */
+    m_content = f ? f->property("contentItem").value<QQuickItem *>() : nullptr;
+    QQuickItem *content = m_content;
+    /* the packed effects, and the items that carry any effect */
     QHash<QQuickItem *, QList<EdgeEffect *>> byItem;
-    for (const QPointer<EdgeEffect> &e : effects) {
-        if (e && e->m_item)
+    bool anyPacked = false;
+    for (const QPointer<EdgeEffect> &e : std::as_const(m_effects)) {
+        if (e && e->m_item) {
             byItem[e->m_item.data()] << e.data();
+            anyPacked = anyPacked || e->m_packed;
+        }
     }
-    struct Row {
-        EdgeEffect *effect;
-        qreal top;      /* the row's natural top in the viewport (inset included) */
-        qreal height;   /* the row (the item less its insets) */
-        qreal inset;
-        qreal itemHeight;
-    };
-    QVector<Row> rows;
-    QVector<EdgeEffect *> rest;
-    const qreal vh = f->height();
-    const bool reduced = ReduceMotion::instance()->enabled();
+    if (!anyPacked)
+        return;
+    const bool on = f && content && f->height() > 0 && !ReduceMotion::instance()->enabled();
     int leaders = 0;
-    for (const QPointer<EdgeEffect> &e : effects) {
+    QVector<EdgeEffect *> rest;
+    for (const QPointer<EdgeEffect> &e : std::as_const(m_effects)) {
         if (!e || !e->m_packed)
             continue;
         QQuickItem *it = e->m_item;
-        bool in = e->m_enabled && it && it->parentItem() && it->window() && it->isVisible()
-                && it->height() > 0 && vh > 0 && !reduced;
+        bool in = on && e->m_enabled && it && it->parentItem() && it->window() && it->isVisible()
+                && it->height() > 0 && content->isAncestorOf(it);
         if (in) {
             /* another effect on the same item (the page's own, or a packed
              * one that joined first) or on an item this one is inside */
@@ -421,7 +450,7 @@ void EdgePacker::doLayout()
                 if (o != e && (!o->m_packed || same.indexOf(o) < same.indexOf(e.data())))
                     in = false;
             }
-            for (QQuickItem *p = it->parentItem(); in && p && p != f; p = p->parentItem()) {
+            for (QQuickItem *p = it->parentItem(); in && p && p != content; p = p->parentItem()) {
                 if (byItem.contains(p))
                     in = false;
             }
@@ -432,34 +461,54 @@ void EdgePacker::doLayout()
         }
         if (!e->m_onlyWithRows)
             leaders++;
-        /* the natural place: through the parent, without the item's own
+        /* the natural place in the content, without the item's own
          * transform (the one this layout drives) */
-        const qreal y = it->parentItem()->mapToItem(f, QPointF(0, it->y())).y();
+        const qreal y = it->parentItem()->mapToItem(content, QPointF(0, it->y())).y();
         const qreal itemH = it->height();
         const qreal inset = qBound<qreal>(0, e->m_inset, itemH / 2 - 0.5);
-        rows.append(Row{ e.data(), y + inset, itemH - 2 * inset, inset, itemH });
+        m_rows.append(Row{ e.data(), y + inset, itemH - 2 * inset, inset, itemH });
     }
     /* headers alone (no other row takes part): at rest, as a page of plain
      * rows had them */
     if (leaders == 0) {
-        for (const Row &r : std::as_const(rows))
+        for (const Row &r : std::as_const(m_rows))
             rest << r.effect;
-        rows.clear();
+        m_rows.clear();
     }
-    std::stable_sort(rows.begin(), rows.end(), [](const Row &a, const Row &b) { return a.top < b.top; });
-    const int n = rows.size();
-    QVector<qreal> tops(n), hs(n), gaps(n);
-    QVector<const EdgeSpec *> specs(n);
+    for (EdgeEffect *e : std::as_const(rest))
+        e->setLayoutValues(1, 1, 1, 0, 0);
+    std::stable_sort(m_rows.begin(), m_rows.end(),
+                     [](const Row &a, const Row &b) { return a.contentTop < b.contentTop; });
+    const int n = m_rows.size();
+    m_specs.resize(n);
+    m_tops.resize(n);
+    m_hs.resize(n);
+    m_gaps.resize(n);
     for (int i = 0; i < n; i++) {
-        tops[i] = rows[i].top;
-        hs[i] = rows[i].height;
-        gaps[i] = i + 1 < n ? rows[i + 1].top - (rows[i].top + rows[i].height) : 0;
-        specs[i] = &rows[i].effect->m_spec;
+        const Row &r = m_rows[i];
+        m_specs[i] = &r.effect->m_spec;
+        /* laid out on whole pixels (stock lays out in integer px), so a row
+         * at scale 1 keeps its place and fractions do not add up down the
+         * list; the gap takes the remainder */
+        m_hs[i] = qRound(r.height);
+        m_gaps[i] = i + 1 < n ? m_rows[i + 1].contentTop - (r.contentTop + m_hs[i]) : 0;
     }
-    const QVector<EdgePlace> places = EdgeLayout::layout(specs, tops, hs, gaps, vh, reduced);
-    for (int i = 0; i < n && i < places.size(); i++) {
-        const Row &r = rows[i];
-        const EdgePlace &p = places[i];
+}
+
+void EdgePacker::place()
+{
+    const int n = m_rows.size();
+    QQuickItem *content = m_content;
+    if (n == 0 || !content || !m_flickable)
+        return;
+    /* a scroll moves the content: the natural places move with it */
+    const qreal cy = content->y();
+    for (int i = 0; i < n; i++)
+        m_tops[i] = cy + m_rows[i].contentTop;
+    EdgeLayout::layout(m_specs, m_tops, m_hs, m_gaps, m_flickable->height(), false, m_places);
+    for (int i = 0; i < n; i++) {
+        const Row &r = m_rows[i];
+        const EdgePlace &p = m_places[i];
         const qreal s = p.v.scale;
         qreal origin = r.inset;
         qreal shift = 0;
@@ -467,13 +516,11 @@ void EdgePacker::doLayout()
             /* above the anchor: about its bottom, the picture's top at p.y */
             origin = r.itemHeight - r.inset;
             if (p.shown)
-                shift = p.y + s * r.height - (r.top + r.height);
+                shift = p.y + s * r.height - (m_tops[i] + r.height);
         } else if (p.shown) {
             /* the anchor and below: about its top */
-            shift = p.y - r.top;
+            shift = p.y - m_tops[i];
         }
         r.effect->setLayoutValues(s, p.v.containerAlpha, p.v.contentAlpha, shift, origin);
     }
-    for (EdgeEffect *e : std::as_const(rest))
-        e->setLayoutValues(1, 1, 1, 0, 0);
 }

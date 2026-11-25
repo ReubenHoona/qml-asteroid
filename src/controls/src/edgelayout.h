@@ -105,10 +105,17 @@ struct EdgePlace
  *
  * A row keeps its natural place in the Flickable (the list scrolls evenly
  * at its natural length); what moves is its picture: a Scale about its
- * edge nearest the centre (origin.y 0 at and below the anchor, its height
- * above it) and a Translate to the place the layout gives. EdgeEffect does
- * this by itself with `packed: true` (ScalingList, ListItem, ListRow,
- * ListHeader and ListSubHeader).
+ * edge nearest the centre (origin.y 0 for the item nearest the middle and
+ * below it, its height above it) and a Translate to the place the layout
+ * gives. EdgeEffect does this by itself with `packed: true` (ScalingList,
+ * ListItem, ListRow, InlineSlider, Button.edgeEffect; ListHeader and
+ * ListSubHeader when the list has packed rows), with the same numbers
+ * as this function and WearEdge.js.
+ *
+ * Cost: layout() from QML converts the spec map and the three lists on
+ * every call. A list laid out from QML on every frame (the launcher's
+ * WearList) spends less with WearEdge.js itself, which gives the same
+ * numbers; the C++ side below (and EdgeEffect packed) converts nothing.
  */
 class EdgeLayout : public QObject
 {
@@ -131,30 +138,41 @@ public:
     static qreal bezier(const qreal e[4], qreal x);
     static qreal progress(const EdgeSpec &spec, qreal top, qreal h);
     static qreal value(qreal l, const EdgeSpec::Variable &v, const qreal e[4]);
+    /* one easing per row: the variables that share a zone share it */
     static EdgeValues evaluate(const EdgeSpec &spec, qreal top, qreal h, bool reduced);
     static qreal ceilHeight(qreal h, qreal scale);
-    /* one spec per item (specs[i]); returns the anchor in *anchor. The
+    /* one spec per item (specs[i]) into out (its capacity is kept, so a
+     * caller that keeps out allocates nothing); returns the anchor. The
      * anchor (the item nearest the middle) stays where it is and scales
      * about its top, as WearEdge.js and stock (TransformingLazyColumn lays
      * an item out at ceil(s h) from its top) */
-    static QVector<EdgePlace> layout(const QVector<const EdgeSpec *> &specs, const QVector<qreal> &tops,
-                                     const QVector<qreal> &hs, const QVector<qreal> &gaps, qreal vh,
-                                     bool reduced, int *anchor = nullptr);
+    static int layout(const QVector<const EdgeSpec *> &specs, const QVector<qreal> &tops,
+                      const QVector<qreal> &hs, const QVector<qreal> &gaps, qreal vh,
+                      bool reduced, QVector<EdgePlace> &out);
 };
 
 /*
- * The packed layout of one Flickable's rows: every EdgeEffect in the
- * Flickable joins its packer; the ones with `packed: true` are laid out
- * together on every move (EdgeLayout::layout) and get their scale,
- * alphas, translateY and originY from it, the same numbers as
- * EdgeLayout.layout() and WearEdge.js: the rows above the anchor scale
- * about their bottom, the anchor and the rows below about their top. A
- * packed effect sits out (at
- * rest) when its item, or an item it is inside, carries another
- * EdgeEffect: a ListItem given to a ScalingList as its itemDelegate, or a
- * ListHeader with an EdgeEffect of the page's own. An effect with
- * onlyWithRows (ListHeader, ListSubHeader) takes part only when another
- * row does; a page of plain rows keeps its headers at rest.
+ * The packed layout of one Flickable's rows. Every EdgeEffect in the
+ * Flickable joins its packer; the packed ones are laid out together
+ * (EdgeLayout::layout) and get their scale, alphas, translateY and originY
+ * from it.
+ *
+ * Who takes part (worked out again only when the rows change: one joins
+ * or leaves, moves, resizes, shows or hides, or an effect's values change;
+ * before the next frame):
+ *  - a packed, enabled effect whose item is visible, in the Flickable's
+ *    content and taller than 0;
+ *  - not when its item, or an item it is inside, carries another
+ *    EdgeEffect (a ListItem in a ScalingList's itemDelegate, a ListHeader
+ *    with an EdgeEffect of the page's own): it stays at rest;
+ *  - an effect with onlyWithRows (ListHeader, ListSubHeader) only when at
+ *    least one other row takes part; a page of plain rows keeps its
+ *    headers at rest, as before the packed layout.
+ * The rows, their order, natural places (in the content), heights, gaps
+ * and specs are kept; a scroll only moves the natural places by the
+ * content's position and lays them out again, in member buffers. No row
+ * taking part: a scroll costs one test. The per-frame signal it waits on
+ * is connected only while a layout is due.
  */
 class EdgePacker : public QObject
 {
@@ -168,24 +186,45 @@ public:
     QQuickItem *flickable() const { return m_flickable; }
 
 public slots:
-    /* now: the list moved (contentY, height) */
+    /* now, from the rows kept: the list moved (contentY) */
     void relayout();
-    /* once, before the next frame is synchronised (after the polish that
-     * places the items): rows added, removed, moved or resized */
+    /* the rows changed: work them out again and lay them out once, before
+     * the next frame is synchronised (after the polish that places them) */
     void scheduleRelayout();
 
 private slots:
     void flushScheduled();
+    void viewportResized();
 
 private:
     explicit EdgePacker(QQuickItem *flickable);
     ~EdgePacker() override;
-    void doLayout();
+    void rebuild();
+    void place();
+    void dropFrameHook();
+
+    struct Row {
+        EdgeEffect *effect;
+        qreal contentTop;   /* the row's natural top in the content (inset included) */
+        qreal height;       /* the row: the item less its insets */
+        qreal inset;
+        qreal itemHeight;
+    };
 
     QPointer<QQuickItem> m_flickable;
     /* the registry key (m_flickable is already null when it goes) */
     QQuickItem *m_key = nullptr;
+    QPointer<QQuickItem> m_content;
     QList<QPointer<EdgeEffect>> m_effects;
+    /* the rows taking part, by natural top, and what the layout reads */
+    QVector<Row> m_rows;
+    QVector<const EdgeSpec *> m_specs;
+    QVector<qreal> m_tops;
+    QVector<qreal> m_hs;
+    QVector<qreal> m_gaps;
+    QVector<EdgePlace> m_places;
+    QMetaObject::Connection m_frameHook;
+    bool m_dirty = true;
     bool m_busy = false;
     bool m_again = false;
     bool m_scheduled = false;

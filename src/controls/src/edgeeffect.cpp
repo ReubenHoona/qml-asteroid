@@ -58,6 +58,9 @@ void EdgeEffect::setPacked(bool packed)
         return;
     m_packed = packed;
     emit specChanged();
+    /* a packed row leaves the scroll to the packer: connect again */
+    if (m_complete)
+        findFlickable();
     if (m_packer)
         m_packer->scheduleRelayout();
     update();
@@ -222,11 +225,15 @@ void EdgeEffect::findFlickable()
         }
     }
     if (found) {
-        m_connections << connect(found, SIGNAL(contentYChanged()), this, SLOT(flickableMoved()));
-        m_connections << connect(found, SIGNAL(contentHeightChanged()), this, SLOT(updateContentHeight()));
-        m_connections << connect(found, SIGNAL(topMarginChanged()), this, SLOT(updateContentHeight()));
-        m_connections << connect(found, SIGNAL(bottomMarginChanged()), this, SLOT(updateContentHeight()));
-        m_connections << connect(found, &QQuickItem::heightChanged, this, &EdgeEffect::flickableMoved);
+        /* a packed row: the packer follows the scroll and the viewport for
+         * all rows at once, nothing here per row */
+        if (!m_packed) {
+            m_connections << connect(found, SIGNAL(contentYChanged()), this, SLOT(flickableMoved()));
+            m_connections << connect(found, SIGNAL(contentHeightChanged()), this, SLOT(updateContentHeight()));
+            m_connections << connect(found, SIGNAL(topMarginChanged()), this, SLOT(updateContentHeight()));
+            m_connections << connect(found, SIGNAL(bottomMarginChanged()), this, SLOT(updateContentHeight()));
+            m_connections << connect(found, &QQuickItem::heightChanged, this, &EdgeEffect::flickableMoved);
+        }
         m_connections << connect(m_item, &QQuickItem::yChanged, this, &EdgeEffect::update);
         m_connections << connect(m_item, &QQuickItem::heightChanged, this, &EdgeEffect::update);
         m_connections << connect(m_item, &QQuickItem::visibleChanged, this, &EdgeEffect::update);
