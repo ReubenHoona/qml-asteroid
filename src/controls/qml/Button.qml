@@ -133,7 +133,9 @@ MouseArea {
     property color iconColor: _m2 ? contentColor
         : !enabled ? _disabledContent
         : _filled ? Theme.color.onPrimary : Theme.color.primary
-    /*! The checked toggle row's gradient over the container, 0 (none) to 1. */
+    /*! The checked toggle row's gradient over the container, 0 (none) to 1.
+        A transparent container (a row drawn straight on the background,
+        WearChipButtonTransparent) gets none. */
     property real checkedGradient: 0
     /*! Border (outlined only): 1 dp outlineVariant; onSurface 12 % disabled. */
     property color borderColor: !_outlined ? "transparent"
@@ -211,10 +213,11 @@ MouseArea {
 
         // the checked gradient: primary from 0 at the top left corner to
         // 32.5 % x checkedGradient at the bottom right one (Compose's
-        // default linearGradient, corner to corner), made only while shown
+        // default linearGradient, corner to corner), made only while shown,
+        // and never on a transparent container
         Loader {
             anchors.fill: parent
-            active: button.checkedGradient > 0
+            active: button.checkedGradient > 0 && button.containerColor.a > 0
             sourceComponent: Shape {
                 readonly property color _p: Theme.color.primary
                 readonly property bool _mirrored: button.LayoutMirroring.enabled
