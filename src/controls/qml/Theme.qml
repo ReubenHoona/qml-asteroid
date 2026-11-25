@@ -496,6 +496,9 @@ QtObject {
         /*! Time text: onBackground at tone 80 (TimeTextDefaults.java:16-20; inferred +/-1);
             onBackground #FFFFFF in a Material 2 application (S27-S31). */
         property color timeText: theme.materialVersion === 2 ? theme.m2Palette.onBackground : "#C6C6C6"
+        /*! Captions: plain explanation text and footnotes between rows (the
+            Wear OS 6 emulator's Settings S20-b, S21-b, S23-b: #9AA0A6). */
+        property color caption: "#9AA0A6"
         /*! The scrim behind the time text: black at 0.85 (TimeTextKt.java:89-90). */
         property color timeTextScrim: Qt.rgba(0, 0, 0, 0.85)
         /*! Scroll indicator thumb / track: tone 80 / tone 20 (ScrollIndicatorKt.java:269-273). */

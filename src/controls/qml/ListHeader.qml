@@ -51,6 +51,12 @@ Item {
     /*! 4 dp above, 12 dp below. */
     property real topPadding: Theme.dp(4)
     property real bottomPadding: Theme.space.l
+    /*! The least height: 48 dp (ListHeaderTokens). The Wear OS 6
+        emulator's Settings title has none (0). */
+    property real minimumHeight: Theme.size.listHeader
+    /*! The title colour: onBackground. The Wear OS 6 emulator's Settings
+        title is onSurface (#E8E7EE). */
+    property color color: Theme.color.onBackground
     /*! The label (for tests). */
     readonly property alias label: label
     /*!
@@ -61,7 +67,7 @@ Item {
     property alias edgeEffect: edge.enabled
 
     width: parent ? parent.width : Theme.dp(192)
-    implicitHeight: Math.max(Theme.size.listHeader, label.implicitHeight + topPadding + bottomPadding)
+    implicitHeight: Math.max(minimumHeight, label.implicitHeight + topPadding + bottomPadding)
     height: implicitHeight
 
     Accessible.role: Accessible.Heading
@@ -92,7 +98,7 @@ Item {
             bottomMargin: header.bottomPadding
         }
         role: "titleMedium"
-        color: Theme.color.onBackground
+        color: header.color
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         wrapMode: Text.Wrap

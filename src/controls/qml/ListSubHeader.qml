@@ -24,12 +24,22 @@ import org.asteroid.controls
 
     \brief A category header inside a list (E16).
 
-    Stock (ListSubHeaderTokens.java:6-8): titleSmall (14 sp, weight 550,
-    16 sp line) in onSurface, start-aligned at the bottom of an at least
-    48 dp tall box; 4.16 % of the screen width each side (16 px), 12 dp
-    above (0 for a page's first item, \l first) and 8 dp below. In a
-    scrolling list it shrinks and fades at the edges and packs with the
-    rows (\l edgeEffect).
+    As the Wear OS 6 emulator draws them ('Ring volume', 'Notification
+    volume', S21 / S21-d): labelSmall (13 sp, Medium) in onSurface,
+    start-aligned with the ink of a stem letter (H, N, R) 16 dp inside the
+    list's 5.2 % side padding (x 52 on 384 px; S21-d 'Notification
+    volume' from x 51), no least height; the first cap row 38 pixel rows
+    under the last row of the row above and the next row 22 rows under
+    the last cap row (S21-d: row 120-223, 'N' 261-277; 'R' 82-98, the
+    stepper from 120). \l first: no space above (the cap top at the top
+    of the box). In a scrolling list it shrinks and fades at the edges
+    and packs with the rows (\l edgeEffect).
+
+    Those two spaces include the list's own space between its items,
+    \l rowGap: 4 dp in a list with the stock spacing (ScalingList, a
+    Column with \c{spacing: Theme.space.xs}); set it to 2 dp next to
+    ListItem or ListRow in a Column without spacing (each keeps 2 dp of
+    its own above and below its row), or 0 where nothing else makes room.
 */
 Item {
     id: header
@@ -38,9 +48,19 @@ Item {
     property alias text: label.text
     /*! The first item of the page: no space above. */
     property bool first: false
-    property real horizontalPadding: Theme.margin.subtitleSide
-    readonly property real topPadding: first ? 0 : Theme.space.l
-    readonly property real bottomPadding: Theme.space.m
+    /*! The text's inset each side: the ink of an H at the list's 5.2 % plus
+        16 dp (52 px), so the label starts that much less its left bearing. */
+    property real horizontalPadding: Theme.margin.listSide + Theme.dp(16) - capMetrics.tightBoundingRect.x
+    /*! The space the list already leaves around this header (see above). */
+    property real rowGap: Theme.space.xs
+    /*! From the top of the box to the cap top: 37 px from the row above
+        (its last pixel row and the first cap row 38 apart). */
+    readonly property real topPadding: first ? 0 : Theme.dp(18.5) - rowGap
+    /*! From the last baseline to the bottom of the box: 21 px to the next
+        row (the last cap row and its first row 22 apart). */
+    readonly property real bottomPadding: Theme.dp(10.5) - rowGap
+    /*! The cap height of the font (an H's ink). */
+    readonly property real capHeight: capMetrics.tightBoundingRect.height
     readonly property alias label: label
     /*!
         Shrink and fade near the top and bottom of a round screen while the
@@ -49,7 +69,11 @@ Item {
     property alias edgeEffect: edge.enabled
 
     width: parent ? parent.width : Theme.dp(192)
-    implicitHeight: Math.max(Theme.size.listHeader, label.implicitHeight + topPadding + bottomPadding)
+    // the box ends bottomPadding under the last baseline
+    readonly property real _linePitch: label.lineHeightMode === Text.FixedHeight ? label.lineHeight
+                                       : label.contentHeight / Math.max(1, label.lineCount)
+    implicitHeight: Math.max(0, label.y + label.baselineOffset
+                                + Math.max(0, label.lineCount - 1) * _linePitch + bottomPadding)
     height: implicitHeight
 
     Accessible.role: Accessible.Heading
@@ -66,18 +90,20 @@ Item {
         Translate { y: edge.translateY }
     ]
 
+    TextMetrics {
+        id: capMetrics
+        font: label.font
+        text: "H"
+    }
+
     Label {
         id: label
         opacity: edge.alpha
-        anchors {
-            left: parent.left
-            right: parent.right
-            leftMargin: header.horizontalPadding
-            rightMargin: header.horizontalPadding
-            bottom: parent.bottom
-            bottomMargin: header.bottomPadding
-        }
-        role: "titleSmall"
+        x: header.horizontalPadding
+        width: Math.max(0, header.width - 2 * header.horizontalPadding)
+        // the cap top topPadding under the top of the box
+        y: header.topPadding - (baselineOffset - header.capHeight)
+        role: "labelSmall"
         color: Theme.color.onSurface
         horizontalAlignment: Text.AlignLeft
         wrapMode: Text.Wrap
