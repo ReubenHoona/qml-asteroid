@@ -201,6 +201,7 @@ public slots:
     void scheduleRelayout();
 
 private slots:
+    void scrolled();
     void flushScheduled();
     void viewportResized();
     void gestureStarted();
@@ -211,6 +212,8 @@ private:
     void rebuild();
     void place();
     void dropFrameHook();
+    /* a layout before the next frame (the frame hook, or a queued call) */
+    void makeDue();
 
     struct Row {
         EdgeEffect *effect;
@@ -237,6 +240,9 @@ private:
     bool m_busy = false;
     bool m_again = false;
     bool m_scheduled = false;
+    /* passes in a row that did not settle in four rounds (reset by a
+     * scroll or a change from outside) */
+    int m_unsettled = 0;
 };
 
 #endif // EDGELAYOUT_H

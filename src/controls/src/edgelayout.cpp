@@ -320,7 +320,7 @@ EdgePacker *EdgePacker::forFlickable(QQuickItem *flickable)
 EdgePacker::EdgePacker(QQuickItem *flickable) : QObject(flickable),
     m_flickable(flickable), m_key(flickable)
 {
-    connect(flickable, SIGNAL(contentYChanged()), this, SLOT(relayout()));
+    connect(flickable, SIGNAL(contentYChanged()), this, SLOT(scrolled()));
     connect(flickable, SIGNAL(movementStarted()), this, SLOT(gestureStarted()));
     connect(flickable, &QQuickItem::heightChanged, this, &EdgePacker::viewportResized);
     connect(flickable, &QQuickItem::visibleChanged, this, &EdgePacker::scheduleRelayout);
@@ -363,6 +363,19 @@ void EdgePacker::scheduleRelayout()
         m_again = true;
         return;
     }
+    /* a change from outside: a fresh budget for passes that do not settle */
+    m_unsettled = 0;
+    makeDue();
+}
+
+void EdgePacker::scrolled()
+{
+    m_unsettled = 0;
+    relayout();
+}
+
+void EdgePacker::makeDue()
+{
     if (m_scheduled)
         return;
     m_scheduled = true;
@@ -420,7 +433,19 @@ void EdgePacker::relayout()
             rebuild();
         place();
     } while (m_again && ++rounds < 4);
+    const bool unsettled = m_again;
     m_busy = false;
+    if (!unsettled) {
+        m_unsettled = 0;
+    } else if (++m_unsettled <= 8) {
+        /* the rows still moved after four rounds (something that moves a
+         * row when its picture moves): once more on the next frame, at most
+         * eight times after a scroll or a change, so they are not left
+         * dirty with nothing due; then they stay as the last round put them
+         * (still marked dirty: the next scroll or change works them out) */
+        m_dirty = true;
+        makeDue();
+    }
 }
 
 void EdgePacker::rebuild()
