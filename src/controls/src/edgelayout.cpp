@@ -321,6 +321,7 @@ EdgePacker::EdgePacker(QQuickItem *flickable) : QObject(flickable),
     m_flickable(flickable), m_key(flickable)
 {
     connect(flickable, SIGNAL(contentYChanged()), this, SLOT(relayout()));
+    connect(flickable, SIGNAL(movementStarted()), this, SLOT(gestureStarted()));
     connect(flickable, &QQuickItem::heightChanged, this, &EdgePacker::viewportResized);
     connect(flickable, &QQuickItem::visibleChanged, this, &EdgePacker::scheduleRelayout);
     connect(flickable, &QQuickItem::windowChanged, this, &EdgePacker::scheduleRelayout);
@@ -384,6 +385,13 @@ void EdgePacker::dropFrameHook()
         disconnect(m_frameHook);
         m_frameHook = QMetaObject::Connection();
     }
+}
+
+/* A touch gesture starts: the rows are worked out again at its first move
+ * (one rebuild per gesture), which catches a row moved by a transform */
+void EdgePacker::gestureStarted()
+{
+    m_dirty = true;
 }
 
 void EdgePacker::viewportResized()

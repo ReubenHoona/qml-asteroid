@@ -173,6 +173,14 @@ public:
  * content's position and lays them out again, in member buffers. No row
  * taking part: a scroll costs one test. The per-frame signal it waits on
  * is connected only while a layout is due.
+ *
+ * Limit: a row that moves only by a transform (a Translate or Scale on an
+ * item between it and the content) gives no signal; the kept place is
+ * worked out again at the start of the next touch gesture
+ * (movementStarted: one rebuild per gesture) or with the next change of
+ * the rows. Moved by a program or the crown alone, it stays where it was
+ * kept until then. Rows that move with y (Column, ListView, anchors) are
+ * followed at once.
  */
 class EdgePacker : public QObject
 {
@@ -195,6 +203,7 @@ public slots:
 private slots:
     void flushScheduled();
     void viewportResized();
+    void gestureStarted();
 
 private:
     explicit EdgePacker(QQuickItem *flickable);
