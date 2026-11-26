@@ -74,11 +74,21 @@ import org.asteroid.controls
         the card 102 px out, and M10 / V10 (260 px in 200 ms) move it 22 px a
         frame, the finger's 21.7, about 55 px behind the finger all the way
         (so not a ratio: 0.64 x 260 = 166 px, the card reached 174-192 px).
-        The thresholds compare with the card's offset as before; the fling
-        speed is the finger's, which the card moves at once it moves.
+        The fling speed is the finger's, which the card moves at once it
+        moves.
+        A release goes to an anchor by stock's rule (the Wear OS material3
+        SwipeToReveal fling behaviour, decompiled deskclock and contacts),
+        not by the CP3A thresholds: see \l anchorFor. The anchors are covered
+        (0), revealing (\l revealingOffset on each side the card can go) and
+        revealed (the card's width). Without a secondary action the partial
+        anchor is stock's single-action one, 64 dp x width / 192 dp (115 px
+        for a 344 px card), so the M10 / V10 swipe (the card about 200 px out,
+        the finger at 650 dp/s) clears the card as in the emulator, and a card
+        held as S34 (102 px) and let go stays at the partial reveal.
     \endlist
-    Thresholds, the partial anchor, haptics, the edge exclusion and the
-    1500 / 1.0 settle spring stay CP3A in both.
+    Haptics, the edge exclusion and the 1500 / 1.0 settle spring stay CP3A in
+    both; the thresholds and the partial anchor stay CP3A without
+    \l expressiveLook.
 
     \qml
     SwipeToReveal {
@@ -115,12 +125,24 @@ Item {
 
     readonly property bool _isSwipeToReveal: true
     readonly property real _screenWidth: Screen.desktopAvailableWidth > 0 ? Screen.desktopAvailableWidth : Theme.dp(192)
-    /*! The partial anchor (px, positive): 130 dp x width / 192 dp. */
-    readonly property real revealingOffset: Theme.dp(130) * width / Theme.dp(192)
-    /*! Past this (px) a release goes to the full reveal: 0.75 x 192 dp - 10 dp. */
+    /*! The partial anchor (px, positive): 130 dp x width / 192 dp; with
+        \l expressiveLook and no secondary action stock's single-action
+        anchor, 64 dp x width / 192 dp (192 dp: the screen's width). */
+    readonly property real revealingOffset: (expressiveLook && !hasSecondaryAction ? Theme.dp(64) : Theme.dp(130)) * width / Theme.dp(192)
+    /*! Past this (px) a release goes to the full reveal: 0.75 x 192 dp - 10 dp
+        (CP3A: not used with \l expressiveLook). */
     readonly property real fullThreshold: 0.75 * Theme.dp(192) - Theme.dp(10)
-    /*! A fling faster than this (px/s, towards the side) goes to the full reveal: 800 dp/s. */
+    /*! A fling faster than this (px/s, towards the side) goes to the full reveal: 800 dp/s.
+        With \l expressiveLook: at this speed or more a release goes to the last anchor
+        in the finger's direction. */
     readonly property real flingVelocity: Theme.dp(800)
+    /*! With \l expressiveLook: at this speed (px/s) or more, and under
+        \l flingVelocity, a release goes to the next anchor in the finger's
+        direction; slower, to the nearer of the two anchors around the card: 200 dp/s. */
+    readonly property real anchorVelocity: Theme.dp(200)
+    /*! With \l expressiveLook: a finger that stopped this long (ms) before it let go
+        is no fling (stock's velocity tracker ends its estimate at a 40 ms gap). */
+    readonly property int stopTime: 40
     /*! Touches starting in this left part of the screen are ignored while covered: 15 %. */
     readonly property real edgeExclusion: 0.15 * _screenWidth
     readonly property real touchSlop: Theme.dp(8)
@@ -158,10 +180,10 @@ Item {
     onSideChanged: if (side !== 0) _lastSide = side
 
     /*! Animate to an anchor: "covered", "revealing" or "revealed", on the
-        card's side; velocity (px/s, negative = to the left) is the finger's
-        when it lets go. */
-    function settle(target, velocity) {
-        var s = side !== 0 ? side : _lastSide
+        card's side (or on \a toSide: -1 left, 1 right); velocity (px/s,
+        negative = to the left) is the finger's when it lets go. */
+    function settle(target, velocity, toSide) {
+        var s = toSide ? toSide : side !== 0 ? side : _lastSide
         var to = target === "revealed" ? s * width : target === "revealing" ? s * revealingOffset : 0
         if (target !== "covered" && state_ !== target)
             _haptic()
@@ -406,8 +428,10 @@ Item {
                 return
             }
             tracking = false
-            // a drag the card did not follow yet is no fling
-            swipe._release(engaged ? velocity : 0)
+            // a drag the card did not follow yet is no fling; with expressiveLook
+            // neither is a finger that stopped before it let go (stock)
+            var stopped = swipe.expressiveLook && Date.now() - lastT > swipe.stopTime
+            swipe._release(engaged && !stopped ? velocity : 0)
         }
         onClicked: (mouse) => { mouse.accepted = swipe.state_ !== "covered" }
         onCanceled: {
@@ -422,19 +446,87 @@ Item {
     /*!
         Stock's decision for a swipe of \a distance px (towards the card's
         side) released at \a velocity px/s (negative = towards that side).
+        CP3A: past \l fullThreshold or a fling over \l flingVelocity towards
+        the side reveals, else the nearer of covered and revealing. With
+        \l expressiveLook: the state of \l anchorFor (which may be on the
+        other side, for a fast fling away from the side).
     */
     function decide(distance, velocity) {
+        if (expressiveLook)
+            return _stateAt(anchorFor(-distance, velocity))
         if (distance >= fullThreshold || velocity <= -flingVelocity)
             return "revealed"
         return distance >= revealingOffset / 2 ? "revealing" : "covered"
     }
+    /*!
+        With \l expressiveLook: the anchor (a signed offset, px) a release at
+        \a offset px with the finger at \a velocity px/s (negative = to the
+        left) goes to. Stock (the Wear OS material3 SwipeToReveal fling
+        behaviour, decompiled deskclock and contacts):
+        \list
+        \li no speed: the nearest anchor;
+        \li under \l anchorVelocity (200 dp/s): the nearer of the two anchors
+            around the card (half the distance between them, measured from the
+            one the finger moves away from);
+        \li from 200 dp/s to under \l flingVelocity (800 dp/s): the next
+            anchor in the finger's direction (one the card is exactly at
+            counts);
+        \li 800 dp/s or more: the last anchor in that direction (the full
+            reveal on that side, or covered when the card cannot go there).
+        \endlist
+        The anchors: -width, -\l revealingOffset, 0 and, with
+        \l bidirectional, \l revealingOffset and width.
+    */
+    function anchorFor(offset, velocity) {
+        var a = bidirectional ? [-width, -revealingOffset, 0, revealingOffset, width]
+                              : [-width, -revealingOffset, 0]
+        var v = isNaN(velocity) ? 0 : velocity
+        var i
+        if (v === 0) {
+            var best = a[0]
+            for (i = 1; i < a.length; i++)
+                if (Math.abs(a[i] - offset) <= Math.abs(best - offset))
+                    best = a[i]
+            return best
+        }
+        if (Math.abs(v) >= flingVelocity)
+            return v < 0 ? a[0] : a[a.length - 1]
+        // the anchors at or below (lower) and at or above (upper) the card
+        var lower = a[0], upper = a[a.length - 1]
+        for (i = 0; i < a.length; i++) {
+            if (a[i] <= offset)
+                lower = a[i]
+            if (a[a.length - 1 - i] >= offset)
+                upper = a[a.length - 1 - i]
+        }
+        var forward = v > 0
+        if (Math.abs(v) >= anchorVelocity)
+            return forward ? upper : lower
+        var from = forward ? lower : upper
+        if (Math.abs(from - offset) < Math.abs(upper - lower) / 2)
+            return from
+        return forward ? upper : lower
+    }
+    function _stateAt(anchor) {
+        return anchor === 0 ? "covered" : Math.abs(anchor) >= width ? "revealed" : "revealing"
+    }
+    function _settleAt(anchor, velocity) {
+        settle(_stateAt(anchor), velocity, anchor > 0 ? 1 : anchor < 0 ? -1 : 0)
+    }
     /*! A release \a distance px to the left at \a velocity px/s (negative =
         to the left). */
     function release(distance, velocity) {
-        settle(decide(distance, velocity), velocity)
+        if (expressiveLook)
+            _settleAt(anchorFor(-distance, velocity), velocity)
+        else
+            settle(decide(distance, velocity), velocity)
     }
     // a release where the card is, mirrored by its side; velocity in px/s (negative = left)
     function _release(velocity) {
+        if (expressiveLook) {
+            _settleAt(anchorFor(offset, velocity), velocity)
+            return
+        }
         var s = side !== 0 ? side : -1
         settle(decide(Math.abs(offset), -s * velocity), velocity)
     }
