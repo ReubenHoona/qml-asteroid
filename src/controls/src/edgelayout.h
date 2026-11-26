@@ -15,6 +15,7 @@
 
 class QQuickItem;
 class EdgeEffect;
+class EdgeContainerWatch;
 
 /*
  * The edge transformation of a Wear OS list (TransformingLazyColumn) as a
@@ -174,13 +175,16 @@ public:
  * taking part: a scroll costs one test. The per-frame signal it waits on
  * is connected only while a layout is due.
  *
- * Limit: a row that moves only by a transform (a Translate or Scale on an
- * item between it and the content) gives no signal; the kept place is
- * worked out again at the start of the next touch gesture
- * (movementStarted: one rebuild per gesture) or with the next change of
- * the rows. Moved by a program or the crown alone, it stays where it was
- * kept until then. Rows that move with y (Column, ListView, anchors) are
- * followed at once.
+ * Rows that move with y (Column, ListView, anchors) are followed at once.
+ * So are the items between a row and the content (a Column, a section with
+ * a Translate or a Scale): a change of their transform, position or size
+ * (their own Matrix change, QQuickItemChangeListener::itemTransformChanged;
+ * a transform has no signal) works the rows out again before the next
+ * frame. Only the items above the rows taking part are watched (none for
+ * a ListView's own delegates) and a scroll moves none of them, so a scroll
+ * costs no more than before. A change they make while the rows are being
+ * laid out (a transform bound to a row's own values) is not followed: it
+ * would lay the rows out again for ever.
  */
 class EdgePacker : public QObject
 {
@@ -236,6 +240,10 @@ private:
     QVector<qreal> m_gaps;
     QVector<EdgePlace> m_places;
     QMetaObject::Connection m_frameHook;
+    /* the items between the rows taking part and the content, watched for
+     * a move by a transform (owned) */
+    friend class EdgeContainerWatch;
+    EdgeContainerWatch *m_watch = nullptr;
     bool m_dirty = true;
     bool m_busy = false;
     bool m_again = false;

@@ -13,6 +13,7 @@
 #include <QQuickWindow>
 #include <QtMath>
 #include <algorithm>
+#include <private/qquickitem_p.h>
 
 /* ---- the spec ---- */
 
@@ -299,6 +300,56 @@ QVariantList EdgeLayout::layout(const QVariantMap &spec, const QVariantList &top
 
 /* ---- the packer ---- */
 
+/*
+ * The items between the packer's rows and the content (a Column, a section
+ * with a Translate). Qt has no signal for a transform; an item whose
+ * transform, transform origin, scale, rotation, position or size changes
+ * tells its Matrix listeners (QQuickItemPrivate::transformChanged), and so
+ * does a transform added to it or taken away. Only an item's own change
+ * counts: one above it (a scroll moves the content) arrives with another
+ * transformedItem when Qt walks a subtree, and the items above a row are
+ * watched themselves.
+ */
+class EdgeContainerWatch : public QQuickItemChangeListener
+{
+public:
+    explicit EdgeContainerWatch(EdgePacker *packer) : m_packer(packer) {}
+    ~EdgeContainerWatch() { set(QVector<QQuickItem *>()); }
+
+    /* watch exactly these items */
+    void set(const QVector<QQuickItem *> &items)
+    {
+        for (QQuickItem *it : std::as_const(m_items)) {
+            if (!items.contains(it))
+                QQuickItemPrivate::get(it)->removeItemChangeListener(this, types());
+        }
+        for (QQuickItem *it : items) {
+            if (!m_items.contains(it))
+                QQuickItemPrivate::get(it)->addItemChangeListener(this, types());
+        }
+        m_items = items;
+    }
+
+    void itemTransformChanged(QQuickItem *item, QQuickItem *transformedItem) override
+    {
+        /* m_busy: the packer's own values moved it (a transform bound to a
+         * row's values on an item above the row): not followed, it would
+         * lay the rows out again for ever */
+        if (item == transformedItem && !m_packer->m_busy)
+            m_packer->scheduleRelayout();
+    }
+    /* Qt drops its listeners itself */
+    void itemDestroyed(QQuickItem *item) override { m_items.removeAll(item); }
+
+private:
+    static QQuickItemPrivate::ChangeTypes types()
+    {
+        return QQuickItemPrivate::ChangeTypes(QQuickItemPrivate::Matrix) | QQuickItemPrivate::Destroyed;
+    }
+    EdgePacker *m_packer;
+    QVector<QQuickItem *> m_items;
+};
+
 static QHash<QQuickItem *, EdgePacker *> &packers()
 {
     /* never freed: a Flickable may go after static destruction at exit */
@@ -318,7 +369,7 @@ EdgePacker *EdgePacker::forFlickable(QQuickItem *flickable)
 }
 
 EdgePacker::EdgePacker(QQuickItem *flickable) : QObject(flickable),
-    m_flickable(flickable), m_key(flickable)
+    m_flickable(flickable), m_key(flickable), m_watch(new EdgeContainerWatch(this))
 {
     connect(flickable, SIGNAL(contentYChanged()), this, SLOT(scrolled()));
     connect(flickable, SIGNAL(movementStarted()), this, SLOT(gestureStarted()));
@@ -330,6 +381,7 @@ EdgePacker::EdgePacker(QQuickItem *flickable) : QObject(flickable),
 
 EdgePacker::~EdgePacker()
 {
+    delete m_watch;
     packers().remove(m_key);
 }
 
@@ -401,7 +453,8 @@ void EdgePacker::dropFrameHook()
 }
 
 /* A touch gesture starts: the rows are worked out again at its first move
- * (one rebuild per gesture), which catches a row moved by a transform */
+ * (one rebuild per gesture): a guard for a row moved in a way no hook
+ * follows */
 void EdgePacker::gestureStarted()
 {
     m_dirty = true;
@@ -452,6 +505,8 @@ void EdgePacker::rebuild()
 {
     m_dirty = false;
     m_rows.clear();
+    /* the items between the rows taking part and the content */
+    QVector<QQuickItem *> containers;
     QQuickItem *f = m_flickable;
     m_content = f ? f->property("contentItem").value<QQuickItem *>() : nullptr;
     QQuickItem *content = m_content;
@@ -464,8 +519,10 @@ void EdgePacker::rebuild()
             anyPacked = anyPacked || e->m_packed;
         }
     }
-    if (!anyPacked)
+    if (!anyPacked) {
+        m_watch->set(containers);
         return;
+    }
     const bool on = f && content && f->height() > 0 && !ReduceMotion::instance()->enabled();
     int leaders = 0;
     QVector<EdgeEffect *> rest;
@@ -500,6 +557,10 @@ void EdgePacker::rebuild()
         const qreal itemH = it->height();
         const qreal inset = qBound<qreal>(0, e->m_inset, itemH / 2 - 0.5);
         m_rows.append(Row{ e.data(), y + inset, itemH - 2 * inset, inset, itemH });
+        for (QQuickItem *p = it->parentItem(); p && p != content; p = p->parentItem()) {
+            if (!containers.contains(p))
+                containers << p;
+        }
     }
     /* headers alone (no other row takes part): at rest, as a page of plain
      * rows had them */
@@ -507,7 +568,9 @@ void EdgePacker::rebuild()
         for (const Row &r : std::as_const(m_rows))
             rest << r.effect;
         m_rows.clear();
+        containers.clear();
     }
+    m_watch->set(containers);
     for (EdgeEffect *e : std::as_const(rest))
         e->setLayoutValues(1, 1, 1, 0, 0);
     std::stable_sort(m_rows.begin(), m_rows.end(),
