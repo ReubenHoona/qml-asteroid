@@ -19,6 +19,8 @@ static const qreal MIN_ELEMENT_HEIGHT = 0.2;
 static const qreal MAX_ELEMENT_HEIGHT = 0.6;
 static const qreal MIN_TRANSITION_AREA = 0.35;
 static const qreal MAX_TRANSITION_AREA = 0.55;
+/* restAtTop: the scroll over which the effect comes in from rest (px) */
+static const qreal REST_RAMP = 16;
 
 static bool roundScreen()
 {
@@ -75,6 +77,15 @@ void EdgeEffect::setOnlyWithRows(bool only)
     update();
 }
 
+void EdgeEffect::setRestAtTop(bool rest)
+{
+    if (rest == m_restAtTop)
+        return;
+    m_restAtTop = rest;
+    emit specChanged();
+    update();
+}
+
 void EdgeEffect::setInset(qreal inset)
 {
     if (qFuzzyCompare(inset, m_inset))
@@ -86,6 +97,17 @@ void EdgeEffect::setInset(qreal inset)
 
 void EdgeEffect::setLayoutValues(qreal scale, qreal alpha, qreal contentAlpha, qreal translateY, qreal originY)
 {
+    /* restAtTop: at rest with the list at its start (or pulled past it),
+     * the effect blended in over the first REST_RAMP px it scrolls */
+    if (m_restAtTop && m_flickable) {
+        const qreal scrolled = m_flickable->property("contentY").toReal()
+                - m_flickable->property("originY").toReal() + m_flickable->property("topMargin").toReal();
+        const qreal k = qBound<qreal>(0, scrolled / REST_RAMP, 1);
+        scale = 1 - k * (1 - scale);
+        alpha = 1 - k * (1 - alpha);
+        contentAlpha = 1 - k * (1 - contentAlpha);
+        translateY *= k;
+    }
     const qreal itemH = m_item ? m_item->height() : 0;
     if (!qFuzzyCompare(scale, m_scale) || !qFuzzyCompare(alpha, m_alpha)
             || !qFuzzyCompare(contentAlpha, m_contentAlpha) || itemH != m_itemH

@@ -68,6 +68,14 @@ Item {
         header an EdgeEffect of its own keeps that one.
     */
     property alias edgeEffect: edge.enabled
+    /*!
+        Stay at full size and alpha while the list is at its top, the edge
+        effect coming in over the first 16 px it scrolls (EdgeEffect
+        restAtTop). For a page title that sits just inside the edge area at
+        rest: the Wear OS 6 emulator's Settings titles draw at full alpha
+        there (#E8E7EE exactly). Off by default.
+    */
+    property alias restAtTop: edge.restAtTop
 
     width: parent ? parent.width : Theme.dp(192)
     implicitHeight: Math.max(minimumHeight, label.implicitHeight + topPadding + bottomPadding)

@@ -106,6 +106,9 @@ class EdgeEffect : public QObject, public QQmlParserStatus
     Q_PROPERTY(qreal inset READ inset WRITE setInset NOTIFY specChanged)
     /* packed: take part only when another row of the Flickable does (headers) */
     Q_PROPERTY(bool onlyWithRows READ onlyWithRows WRITE setOnlyWithRows NOTIFY specChanged)
+    /* at rest while the Flickable is at its start; the effect comes in over
+     * the first REST_RAMP px of scroll (a page title at the list top) */
+    Q_PROPERTY(bool restAtTop READ restAtTop WRITE setRestAtTop NOTIFY specChanged)
     /* packed: the Translate after the Scale (0 when not packed) */
     Q_PROPERTY(qreal translateY READ translateY NOTIFY valuesChanged)
     /* packed: the Scale's origin.y, the row's edge nearest the centre (0
@@ -153,6 +156,8 @@ public:
     void setInset(qreal inset);
     bool onlyWithRows() const { return m_onlyWithRows; }
     void setOnlyWithRows(bool only);
+    bool restAtTop() const { return m_restAtTop; }
+    void setRestAtTop(bool rest);
     qreal translateY() const { return m_translateY; }
     qreal originY() const { return m_originY; }
 
@@ -201,6 +206,7 @@ private:
     bool m_packed = false;
     qreal m_inset = 0;
     bool m_onlyWithRows = false;
+    bool m_restAtTop = false;
     qreal m_translateY = 0;
     qreal m_originY = 0;
     /* the stock spec with this effect's edge values, for the packer */
