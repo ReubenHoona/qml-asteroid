@@ -141,12 +141,18 @@ Dialog {
     closeOnSwipe: closeOnAction
     onDismissRequested: dismissed()
 
+    // a tap while the dialog leaves (its 150 ms exit, fully transparent at the end) is
+    // not an answer: after X, a quick tap where the check was must not confirm
     function _confirm() {
+        if (!shown)
+            return
         confirmed()
         if (closeOnAction)
             close()
     }
     function _dismiss() {
+        if (!shown)
+            return
         dismissed()
         if (closeOnAction)
             close()

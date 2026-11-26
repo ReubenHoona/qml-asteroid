@@ -177,6 +177,28 @@ TestCase {
         settle(alert)
     }
 
+    // a tap while the dialog leaves is not an answer: X, then a quick tap where the
+    // check is (during the 150 ms exit) must not confirm; a double tap on the check
+    // confirms once
+    function test_11b_alertNoAnswerWhileLeaving() {
+        alert.buttons = "confirmDismiss"
+        alertConfirmed.clear(); alertDismissed.clear()
+        alert.open()
+        tryVerify(function() { return alert.alpha === 1 && alert.contentOffset === 0 }, 2000)
+        mouseClick(alert.dismissButton, 60, 60)
+        verify(alert.active, "still leaving")
+        mouseClick(alert.confirmButton, 63, 54)
+        compare(alertDismissed.count, 1, "dismissed once")
+        compare(alertConfirmed.count, 0, "the tap during the exit did not confirm")
+        settle(alert)
+        alert.open()
+        tryVerify(function() { return alert.alpha === 1 && alert.contentOffset === 0 }, 2000)
+        mouseClick(alert.confirmButton, 63, 54)
+        mouseClick(alert.confirmButton, 63, 54)
+        compare(alertConfirmed.count, 1, "a double tap confirms once")
+        settle(alert)
+    }
+
     function test_12_alertEdgeButton() {
         alert.buttons = "edge"
         alert.open()
