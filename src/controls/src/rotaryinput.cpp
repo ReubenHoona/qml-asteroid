@@ -167,6 +167,9 @@ RotaryInput::RotaryInput(QObject *parent) : QObject(parent),
     m_flingTimer.setSingleShot(true);
     m_flingTimer.setInterval(int(FLING_TIMEFRAME_MS));
     connect(&m_flingTimer, &QTimer::timeout, this, &RotaryInput::maybeFling);
+    m_speedTimer.setSingleShot(true);
+    m_speedTimer.setInterval(int(CrownSpeed::IdleMs));
+    connect(&m_speedTimer, &QTimer::timeout, this, &RotaryInput::snapSpeed);
 }
 
 bool RotaryInput::gliding() const
@@ -311,6 +314,9 @@ void RotaryInput::notePress(QQuickWindow *window, const QPointF &pos)
     m_flinging = false;
     m_flingTimer.stop();
     m_samples.clear();
+    /* the view's own snapping takes over from a crown-speed scroll */
+    m_speedTimer.stop();
+    m_crown.reset();
     /* the next crown event looks the target up again, under this touch */
     m_lastEvent.invalidate();
     Kind kind = None;
@@ -347,7 +353,7 @@ RotaryInput::Kind RotaryInput::kindOf(QQuickItem *item)
             const int snap = item->property("snapMode").toInt();
             const int range = item->property("highlightRangeMode").toInt();
             if ((snap != 0 || range == 2) && item->property("count").toInt() > 0)
-                return Snap;
+                return item->property("rotaryCrownSpeed").toBool() ? Speed : Snap;
         }
         if (scrollsVertically(item) || scrollsHorizontally(item))
             return Free;
@@ -575,6 +581,8 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
             m_tickAcc = 0;
             m_limitArmed = true;
             m_exitSum = 0;
+            m_speedTimer.stop();
+            m_crown.reset();
         }
         m_target = t;
         m_kind = kind;
@@ -590,7 +598,7 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
         m_exitReceiver = exitReceiverFor(t);
         if (kind == Free)
             m_horizontal = !scrollsVertically(t) && scrollsHorizontally(t);
-        else if (kind == Snap)
+        else if (kind == Snap || kind == Speed)
             m_horizontal = t->property("orientation").toInt() == 1; /* ListView.Horizontal */
         else
             m_horizontal = false;
@@ -618,6 +626,9 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
     switch (m_kind) {
     case Free:
         scrollFree(forward);
+        break;
+    case Speed:
+        scrollSpeed(forward);
         break;
     case Exit:
         /* nothing scrolls: every count pushes past the end */
@@ -892,7 +903,147 @@ void RotaryInput::animate(qreal dt)
         m_frame->stop();
         if (m_kind == Snap)
             m_pending = 0;
+        if (m_kind == Speed)
+            speedSettled();
     }
+}
+
+/* Crown-speed mode: the content range. With StrictlyEnforceRange the first
+ * item can reach preferredHighlightBegin (the view's origin already lies
+ * that far before the first item) and the last one preferredHighlightEnd */
+void RotaryInput::speedBounds(qreal *lo, qreal *hi) const
+{
+    QQuickItem *v = m_target;
+    if (v->property("highlightRangeMode").toInt() == 2) {
+        const qreal content = v->property(m_horizontal ? "contentWidth" : "contentHeight").toReal();
+        *lo = minPos(v, m_horizontal);
+        *hi = qMax(*lo, *lo + v->property("preferredHighlightBegin").toReal() + content
+                   - v->property("preferredHighlightEnd").toReal());
+        return;
+    }
+    *lo = minPos(v, m_horizontal);
+    *hi = maxPos(v, m_horizontal);
+}
+
+/* Where the content rests with `item` snapped: its start at the view's
+ * start, or at preferredHighlightBegin for StrictlyEnforceRange */
+qreal RotaryInput::speedSnapPos(QQuickItem *item) const
+{
+    QQuickItem *v = m_target;
+    qreal pos = m_horizontal ? item->x() : item->y();
+    if (v->property("highlightRangeMode").toInt() == 2)
+        pos -= v->property("preferredHighlightBegin").toReal();
+    qreal lo, hi;
+    speedBounds(&lo, &hi);
+    return qBound(lo, pos, hi);
+}
+
+/* Crown-speed mode: one crown event scrolls the view by the crown's pixels */
+void RotaryInput::scrollSpeed(qreal forward)
+{
+    QQuickItem *v = m_target;
+    qreal gain = 1;
+    if (m_fast) {
+        const qreal fast = qBound<qreal>(0, (m_speed - FAST_FROM) / (FAST_TO - FAST_FROM), 1);
+        gain = 1 + (MAX_GAIN - 1) * fast * fast * (3 - 2 * fast);
+    }
+    const qreal px = forward * pxPerCount(v) * gain;
+    if (!gliding())
+        QMetaObject::invokeMethod(v, "cancelFlick");
+    qreal lo, hi;
+    speedBounds(&lo, &hi);
+    const CrownSpeed::Event e = m_crown.scroll(v->property(posName(m_horizontal)).toReal(), px, lo, hi,
+                                               tickPx(v), m_clock.elapsed());
+    m_goal = e.goal;
+    m_speedIndex = -1;
+    /* the snap follows 80 ms after the last crown event */
+    m_speedTimer.start();
+    qCDebug(lcRotary) << "crown speed" << px << "goal" << m_goal << "range" << lo << hi;
+    if (e.atEnd) {
+        if (!pushPastEnd(px) && m_crown.limit(m_goal))
+            Haptics::instance()->scrollLimit();
+        return;
+    }
+    m_exitSum = 0;
+    if (e.tick)
+        Haptics::instance()->scrollTick();
+    startGlide();
+}
+
+/* Crown-speed mode, 80 ms after the last crown event: glide to the nearest
+ * item (the snap positions of the items around the goal, and the ends).
+ * Stock's content is at the goal at once; this one glides there (the
+ * smoothing spring), so a snap still due when the glide ends starts then,
+ * with the items at the goal made */
+void RotaryInput::snapSpeed()
+{
+    QQuickItem *v = m_target;
+    if (!v || m_kind != Speed || m_crown.state() != CrownSpeed::Scrolling)
+        return;
+    if (!m_crown.snapDue(m_clock.elapsed())) {
+        m_speedTimer.start();
+        return;
+    }
+    if (gliding())
+        return;
+    const bool range = v->property("highlightRangeMode").toInt() == 2;
+    const qreal goal = m_crown.goal();
+    const qreal along = goal + 1 + (range ? v->property("preferredHighlightBegin").toReal() : 0);
+    const qreal across = m_horizontal ? v->property("contentY").toReal() + v->height() / 2
+                                      : v->property("contentX").toReal() + v->width() / 2;
+    int index = -1;
+    QMetaObject::invokeMethod(v, "indexAt", Q_RETURN_ARG(int, index),
+                              Q_ARG(qreal, m_horizontal ? along : across),
+                              Q_ARG(qreal, m_horizontal ? across : along));
+    if (index < 0)
+        index = v->property("currentIndex").toInt();
+    const int count = v->property("count").toInt();
+    std::vector<double> positions;
+    std::vector<int> indexes;
+    for (int i = qMax(0, index - 2); i <= qMin(count - 1, index + 2); i++) {
+        QQuickItem *item = nullptr;
+        QMetaObject::invokeMethod(v, "itemAtIndex", Q_RETURN_ARG(QQuickItem *, item), Q_ARG(int, i));
+        if (!item)
+            continue;
+        positions.push_back(speedSnapPos(item));
+        indexes.push_back(i);
+    }
+    if (!range) {
+        /* a list that cannot bring its last items to the start rests at its end */
+        qreal lo, hi;
+        speedBounds(&lo, &hi);
+        positions.push_back(lo);
+        indexes.push_back(-1);
+        positions.push_back(hi);
+        indexes.push_back(-1);
+    }
+    const int k = m_crown.snap(positions);
+    if (k < 0)
+        return;
+    m_speedIndex = indexes[k];
+    m_goal = m_crown.goal();
+    qCDebug(lcRotary) << "crown speed snap to" << m_speedIndex << "at" << m_goal;
+    startGlide();
+}
+
+/* The glide has stopped: a snap that is due starts; after a snap, the
+ * snapped item of a highlight range is the current one */
+void RotaryInput::speedSettled()
+{
+    if (m_crown.state() == CrownSpeed::Scrolling) {
+        /* after this frame: the glide starts again from an event, not from its own frame */
+        if (m_crown.snapDue(m_clock.elapsed()))
+            QTimer::singleShot(0, this, &RotaryInput::snapSpeed);
+        return;
+    }
+    if (m_crown.state() != CrownSpeed::Snapping)
+        return;
+    m_crown.settled();
+    QQuickItem *v = m_target;
+    if (v && m_speedIndex >= 0 && v->property("highlightRangeMode").toInt() == 2
+            && v->property("currentIndex").toInt() != m_speedIndex)
+        v->setProperty("currentIndex", m_speedIndex);
+    m_speedIndex = -1;
 }
 
 void RotaryInput::stepSnap(int steps)

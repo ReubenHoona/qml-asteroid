@@ -16,6 +16,8 @@
 #include <QPair>
 #include <QtQml/qqmlregistration.h>
 
+#include "crownspeed.h"
+
 class QQuickItem;
 class QQuickWindow;
 class QWheelEvent;
@@ -48,6 +50,15 @@ class QJSEngine;
  *    bump (Haptics.scrollLimit) at an end, re-armed once the view moves.
  *  - snapping views (PathView pickers, ListViews that snap or strictly
  *    enforce a highlight range) step item by item with Haptics.scrollFocus.
+ *  - crown-speed mode (stock's picker, face-interaction-32; crownspeed.h):
+ *    a snapping ListView or GridView with `property bool rotaryCrownSpeed:
+ *    true` scrolls freely by the crown's pixels (as a free view, with its
+ *    smoothing and gain), a Haptics.scrollTick every 42 px and one
+ *    Haptics.scrollLimit at an end, and 80 ms after the last crown event
+ *    (or when the smoothing glide reaches the goal, if later) it glides to
+ *    the nearest item (for StrictlyEnforceRange: the item at
+ *    preferredHighlightBegin, which becomes the current one). No view sets
+ *    it by default.
  *  - a curved position indicator at the right edge (PositionIndicator.qml)
  *    shows where a free view is while the crown or a finger scrolls it,
  *    and for 2 s when QML calls RotaryInput.flashIndicator(view) as a list
@@ -100,7 +111,7 @@ class RotaryInput : public QObject
     Q_PROPERTY(bool systemIndicator READ systemIndicator WRITE setSystemIndicator NOTIFY systemIndicatorChanged)
 
 public:
-    enum Kind { None, Free, Snap, Path, Exit };
+    enum Kind { None, Free, Snap, Path, Exit, Speed };
 
     static void install();
     static RotaryInput *instance();
@@ -146,6 +157,11 @@ private:
     static bool scrollsHorizontally(QQuickItem *item);
     void scrollFree(qreal forward);
     void stepSnap(int steps);
+    void scrollSpeed(qreal forward);
+    void snapSpeed();
+    void speedSettled();
+    void speedBounds(qreal *lo, qreal *hi) const;
+    qreal speedSnapPos(QQuickItem *item) const;
     qreal applySlop(qreal counts);
     bool pushPastEnd(qreal px);
     void playLimit(qreal pos);
@@ -189,6 +205,12 @@ private:
      * item, and the stock snap's smoothed crown speed in px/s */
     qreal m_pending = 0;
     qreal m_snapVelocity = 0;
+
+    /* crown-speed mode: its state, the snap 80 ms after the last crown
+     * event (one shot), and the item the snap goes to */
+    CrownSpeed m_crown;
+    QTimer m_speedTimer;
+    int m_speedIndex = -1;
 
     /* haptics: crown px since the last scroll tick (signed, the remainder
      * carried over), and the end bump armed until it plays at limitPos */

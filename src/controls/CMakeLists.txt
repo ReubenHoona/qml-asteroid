@@ -7,6 +7,7 @@ set(SRC
 	src/icon.cpp
 	src/haptics.cpp
 	src/rotaryinput.cpp
+	src/crownspeed.cpp
 	src/edgeeffect.cpp
 	src/edgelayout.cpp
 	src/framediagnostics.cpp
@@ -26,6 +27,7 @@ set(HEADERS
 	src/icon.h
 	src/haptics.h
 	src/rotaryinput.h
+	src/crownspeed.h
 	src/edgeeffect.h
 	src/edgelayout.h
 	src/framediagnostics.h
