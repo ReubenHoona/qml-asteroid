@@ -84,9 +84,16 @@ import "keyboard/prediction/GlideDecoder.js" as G
     The microphone opens \l VoiceInput over the keyboard (stock's voice screen;
     asteroid-assistant's Dictate, D-Bus org.asteroidos.assistant, is its engine):
     what is dictated goes in at the cursor. It shows crossed out when that
-    service is not installed. The emoji key opens \l EmojiPage (stock's emoji
-    page) in place of the keys; \l startPage opens the keyboard directly on
-    either (a reply row's emoji and voice buttons).
+    service is not installed. In a phone call (\l callState above 0) the
+    microphone opens no dictation: stock's full screen notice "Cannot record
+    audio while in a call" with a crossed-out microphone shows instead (Gboard
+    wear_ime_fullscreen_toast: black, the 24 dp icon 22 dp from the top, the
+    14 sp text 18 dp from the sides, a 52 dp round check button 16 dp below;
+    it goes after 3.5 s, with the check or a right swipe). The voice screen
+    checks the call itself as well (\l VoiceInput). The emoji key opens
+    \l EmojiPage (stock's emoji page) in place of the keys; \l startPage
+    opens the keyboard directly on either (a reply row's emoji and voice
+    buttons).
 
     The keyboard draws a frame when something changes; the cursor blinks (500
     ms) only while the display is on and for 30 s after the last touch. The
@@ -137,6 +144,9 @@ FocusScope {
     property string voiceEngine: "assistant"
     /*! btsyncd's Start(): the notification being answered by voice */
     property int voiceNotificationId: 0
+    /*! The phone call (the launcher's CallState over D-Bus: 0 none, 1 ringing,
+        2 in progress): the microphone opens no dictation above 0 */
+    property int callState: 0
     /*! The strip of word suggestions above the keys */
     property bool suggestionsEnabled: echoMode === TextInput.Normal
         && !(inputMethodHints & (Qt.ImhNoPredictiveText | Qt.ImhSensitiveData | Qt.ImhHiddenText
@@ -313,6 +323,8 @@ FocusScope {
         cursor = text.length
         _capitalizeNext()
         _hadChips = suggestions.length > 0
+        if (dictationAllowed)
+            launcherCall.typedCall("CallState", [], function (state) { kb.callState = Number(state) })
         if (dictationAllowed)
             dbusDaemon.typedCall("ListActivatableNames", [], function (names) {
                 // Nemo.DBus hands a string list over as an array-like
@@ -678,10 +690,30 @@ FocusScope {
         iface: "org.freedesktop.DBus"
     }
 
-    /*! Opens the voice screen over the keyboard (the microphone key) */
+    // the launcher's call state (CR-03)
+    DBusInterface {
+        id: launcherCall
+        bus: DBus.SessionBus
+        service: "org.asteroidos.launcher"
+        path: "/org/asteroidos/launcher/call"
+        iface: "org.asteroidos.launcher.Call"
+        signalsEnabled: kb.dictationAllowed
+
+        function callStateChanged(state: int) { kb.callState = Number(state) }
+        function rcCallStateChanged(state: int) { kb.callState = Number(state) }
+    }
+    readonly property string inCallText: qsTr("Cannot record audio while in a call")
+
+    /*! Opens the voice screen over the keyboard (the microphone key); in a
+        call stock's notice instead */
     function showVoice() {
         if (_closing)
             return
+        if (callState > 0) {
+            _touched()
+            _showNotice(inCallText, "ios-mic-off")
+            return
+        }
         _emojiOpen = false
         _voiceOpen = true
         _touched()
@@ -1772,8 +1804,98 @@ FocusScope {
         }
     }
 
+    // ---- stock's full screen notice (WearFullscreenToast): a call refuses the microphone ----
+    property bool _noticeOpen: false
+    property string _noticeText: ""
+    property string _noticeIcon: ""
+    function _showNotice(t, icon) {
+        _noticeText = t
+        _noticeIcon = icon
+        _noticeOpen = true
+        noticeTimer.restart()
+    }
+    function _hideNotice() {
+        noticeTimer.stop()
+        _noticeOpen = false
+    }
+    Timer {
+        id: noticeTimer
+        // stock: 3.5 s (8.5 s with a screen reader, which is not here yet)
+        interval: 3500
+        onTriggered: kb._noticeOpen = false
+    }
+    Rectangle {
+        id: notice
+        objectName: "keyboardNotice"
+        anchors.fill: parent
+        // over everything, the glide trail too
+        z: 3
+        visible: kb._noticeOpen
+        color: kb._c.black
+        // takes every touch (the keys under it get none); a right swipe dismisses
+        MouseArea {
+            anchors.fill: parent
+            DragHandler {
+                target: null
+                yAxis.enabled: false
+                onTranslationChanged: if (active && translation.x > notice.width * 0.25) kb._hideNotice()
+            }
+        }
+        Flickable {
+            anchors.fill: parent
+            contentHeight: noticeColumn.height
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
+            clip: true
+            Column {
+                id: noticeColumn
+                width: parent.width
+                Item { width: 1; height: Theme.dp(22) }
+                Icon {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Theme.dp(24); height: width
+                    name: kb._noticeIcon
+                    color: kb._c.label
+                }
+                Label {
+                    objectName: "keyboardNoticeText"
+                    x: Theme.dp(18)
+                    width: parent.width - 2 * Theme.dp(18)
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.Wrap
+                    text: kb._noticeText
+                    color: kb._c.label
+                    font.pixelSize: Math.round(Theme.sp(14))
+                }
+                Item { width: 1; height: Theme.dp(16) }
+                Rectangle {
+                    objectName: "keyboardNoticeConfirm"
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Theme.dp(52); height: width
+                    radius: width / 2
+                    color: kb._c.paper
+                    Accessible.role: Accessible.Button
+                    Accessible.name: qsTr("Acknowledge the warning")
+                    Icon {
+                        anchors.centerIn: parent
+                        width: Theme.dp(24); height: width
+                        name: "ios-checkmark"
+                        color: kb._c.ink
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: kb._hideNotice()
+                    }
+                }
+                Item { width: 1; height: Theme.dp(16) }
+            }
+        }
+    }
+
     Keys.onBackPressed: {
-        if (_switcherOpen) {
+        if (_noticeOpen) {
+            _hideNotice()
+        } else if (_switcherOpen) {
             _switcherOpen = false
         } else if (_voiceOpen) {
             // "return to keyboard" keeps what was dictated

@@ -53,6 +53,17 @@ import org.asteroid.controls
     \l text (what the keyboard already holds); in "reply" mode \l text is
     empty.
 
+    No dictation in a phone call (the launcher's \l callState, D-Bus
+    org.asteroidos.launcher.Call CallState(), above 0: ringing or in
+    progress): each start asks the launcher before the engine opens the
+    microphone, and in a call the screen shows the failed layout with
+    stock's "Cannot record audio while in a call" (Gboard
+    audio_unavailable_error_title); a call that begins while the engine
+    records stops it the same way. While the engine records (\l recording)
+    the launcher's microphone status icon is claimed: D-Bus
+    org.asteroidos.launcher.Ongoing SetInUse("mic", true), then false (engine
+    "none": the owner records, and claims).
+
     \qml
     VoiceInput {
         anchors.fill: parent
@@ -91,6 +102,9 @@ FocusScope {
     property bool displayOn: Qt.application.active
     /*! The microphone level (0..1) from which speech counts as heard (an engine without start-of-speech events) */
     property real speechLevel: 0.3
+    /*! The phone call (the launcher's CallState: 0 none, 1 ringing, 2 in
+        progress, kept from its CallStateChanged): no dictation above 0 */
+    property int callState: 0
 
     /*! initializing, ready, listening, hearing, done or failed */
     property string phase: "initializing"
@@ -100,6 +114,9 @@ FocusScope {
     property string errorCode: ""
     /*! The microphone level, 0..1 (from asteroid-assistant or btsyncd, about 25 a second) */
     property real level: 0
+    /*! The engine records: from its start to the result, a failure or a cancel
+        (the microphone status icon is claimed meanwhile) */
+    readonly property bool recording: _active && engine !== "none"
 
     /*! What the user said in this screen, the earlier utterances and the one being heard */
     readonly property string dictated: {
@@ -175,6 +192,7 @@ FocusScope {
     readonly property string listeningText: qsTr("Listening…")
     readonly property string restartText: qsTr("Didn’t catch that. Try speaking again")
     readonly property string unavailableText: qsTr("Voice input is unavailable, please use keyboard to input text instead.")
+    readonly property string inCallText: qsTr("Cannot record audio while in a call")
     readonly property string stopDescription: qsTr("Stop voice dictation")
     readonly property string restartDescription: qsTr("Restart voice dictation")
     readonly property string clearAndRestartDescription: qsTr("Clear and restart voice dictation")
@@ -189,7 +207,8 @@ FocusScope {
         case "initializing": return initializingText
         case "ready": return speakNowText
         case "listening": return listeningText
-        case "failed": return _unavailableCode(errorCode) ? unavailableText : restartText
+        case "failed": return errorCode === "in-call" ? inCallText
+                              : _unavailableCode(errorCode) ? unavailableText : restartText
         default: return ""
         }
     }
@@ -226,14 +245,45 @@ FocusScope {
             Haptics.longPress()   // stock: the mic haptic (thud) at ready and at the end
     }
 
-    /*! Starts listening: a new utterance; what was dictated before stays */
+    /*! Starts listening: a new utterance; what was dictated before stays. Not
+        in a phone call: the engine starts once the launcher says there is none */
     function start() {
         partialText = ""
         errorCode = ""
         level = 0
         _session = 0
+        _active = false
+        var token = ++_starts
+        if (callState > 0) {
+            _fail("in-call")
+            return
+        }
         _setState("initializing")
-        _active = engine !== "none"
+        if (engine === "none") {
+            restartRequested()
+            return
+        }
+        // the call state first: the microphone opens only outside a call (no
+        // launcher, or an older one without the Call object: no call known)
+        launcherCall.typedCall("CallState", [], function (state) {
+            if (token !== voice._starts)
+                return
+            voice.callState = Number(state)
+            voice._startEngine()
+        }, function () {
+            if (token === voice._starts)
+                voice._startEngine()
+        })
+    }
+    // the starts so far: a late call state reply of an older start (or of one
+    // cancelled since) starts nothing
+    property int _starts: 0
+    function _startEngine() {
+        if (callState > 0) {
+            _fail("in-call")
+            return
+        }
+        _active = true
         if (engine === "assistant") {
             assistantIface.typedCall("Dictate", [{ "type": "s", "value": "" }], function (session) {
                 if (!voice._active)
@@ -264,10 +314,26 @@ FocusScope {
                     }
                 },
                 function () { voice._fail("no-phone") })
-        } else {
-            restartRequested()
         }
     }
+    // the launcher's CallStateChanged: a call that begins while the engine
+    // records stops it (the call takes the microphone)
+    function _callChanged(state) {
+        callState = Number(state)
+        if (callState > 0 && recording) {
+            cancel()
+            _fail("in-call")
+        }
+    }
+    // the microphone status icon (CR-04): claimed while the engine records
+    property bool _micClaimed: false
+    function _claimMic(on) {
+        if (on === _micClaimed)
+            return
+        _micClaimed = on
+        ongoingIface.typedCall("SetInUse", [{ "type": "s", "value": "mic" }, { "type": "b", "value": on }])
+    }
+    onRecordingChanged: _claimMic(recording)
 
     /*! The user is done talking (the tick) */
     function stop() {
@@ -283,6 +349,7 @@ FocusScope {
 
     /*! Drops the session without a result */
     function cancel() {
+        _starts++
         if (_active) {
             if (engine === "assistant")
                 assistantIface.typedCall("Cancel", [])
@@ -420,7 +487,10 @@ FocusScope {
         if (autoStart)
             start()
     }
-    Component.onDestruction: cancel()
+    Component.onDestruction: {
+        cancel()
+        _claimMic(false)
+    }
 
     // ---- the engines (D-Bus) ----
     // Nemo.DBus names the handler of a signal either "rc" + the Signal or the
@@ -461,6 +531,26 @@ FocusScope {
         function rcError(code: string) { voice.engineError(code) }
         function level(l: real) { voice.engineLevel(l) }
         function rcLevel(l: real) { voice.engineLevel(l) }
+    }
+
+    // the launcher (CR-03, CR-04): the phone call's state and the microphone status icon
+    DBusInterface {
+        id: launcherCall
+        bus: DBus.SessionBus
+        service: "org.asteroidos.launcher"
+        path: "/org/asteroidos/launcher/call"
+        iface: "org.asteroidos.launcher.Call"
+        signalsEnabled: true
+
+        function callStateChanged(state: int) { voice._callChanged(state) }
+        function rcCallStateChanged(state: int) { voice._callChanged(state) }
+    }
+    DBusInterface {
+        id: ongoingIface
+        bus: DBus.SessionBus
+        service: "org.asteroidos.launcher"
+        path: "/org/asteroidos/launcher/ongoing"
+        iface: "org.asteroidos.launcher.Ongoing"
     }
 
     // the display stays on while the screen is up
