@@ -40,6 +40,9 @@ import org.asteroid.controls
     \li Filled colours (primary / onPrimary); label labelMedium centred, up
         to 2 lines; content kept inside the arch (20 dp from the screen edge
         at the content's height).
+    \li The content centred between 6 dp under the top and 8 dp over the
+        bottom, in whole pixels, not higher than the 6 dp
+        (ScaleAndAlignContentNode): 1 dp above the button's middle.
     \li In a scrolling screen (\l flickable) the list keeps \l contentPadding
         free at its end (the button height - 3 dp + 16 dp: set it as the
         flickable's bottomMargin) and the button is held back by the scroll
@@ -195,9 +198,13 @@ MouseArea {
         }
     }
 
+    // as stock's ScaleAndAlignContentNode (the same 6 / 8 dp in the Settings, TalkBack and
+    // Setup apps): y = round((H - h + 6 dp - 8 dp) / 2), at least 6 dp; the launcher's "All
+    // apps" then has its cap top at y 294 as the emulator's (S05; centred: 296-297)
     Column {
         id: _content
-        anchors.centerIn: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Math.max(Theme.dp(6), Math.round((edgeButton.height - height + Theme.dp(6) - Theme.dp(8)) / 2))
         width: Math.max(0, 2 * edgeButton.shape.contentHalfWidth)
         opacity: 1 - edgeButton.shape.fade
         visible: opacity > 0
