@@ -69,6 +69,13 @@ import org.asteroid.controls
         inner side. The card is clipped to its rest bounds, a plain
         rectangle (S34: square at the bottom corner; the round top corner
         there is the screen's edge).
+        The card starts to move \l dragLag (29 dp) after the press and then
+        follows the finger 1:1: S34 / S34-b held 160 px from the press show
+        the card 102 px out, and M10 / V10 (260 px in 200 ms) move it 22 px a
+        frame, the finger's 21.7, about 55 px behind the finger all the way
+        (so not a ratio: 0.64 x 260 = 166 px, the card reached 174-192 px).
+        The thresholds compare with the card's offset as before; the fling
+        speed is the finger's, which the card moves at once it moves.
     \endlist
     Thresholds, the partial anchor, haptics, the edge exclusion and the
     1500 / 1.0 settle spring stay CP3A in both.
@@ -117,6 +124,9 @@ Item {
     /*! Touches starting in this left part of the screen are ignored while covered: 15 %. */
     readonly property real edgeExclusion: 0.15 * _screenWidth
     readonly property real touchSlop: Theme.dp(8)
+    /*! Finger travel (px) the card loses at the start of each drag: 29 dp with
+        \l expressiveLook (S34, M10), 0 (CP3A) without. */
+    readonly property real dragLag: expressiveLook ? Theme.dp(29) : 0
 
     /*! The card's offset (px): negative to the left; positive to the right
         with \l bidirectional. */
@@ -331,6 +341,9 @@ Item {
         enabled: swipe.swipeEnabled
         propagateComposedEvents: true
         property bool tracking: false
+        // the card moves (the finger went dragLag from the press), on that side
+        property bool engaged: false
+        property int lagSide: 0
         property bool ignore: false
         property real startX: 0
         property real startY: 0
@@ -348,6 +361,8 @@ Item {
             }
             _anim.stop()
             tracking = false
+            engaged = false
+            lagSide = 0
             startX = p.x; startY = p.y
             startOffset = swipe.offset
             lastX = p.x; lastT = Date.now(); velocity = 0
@@ -369,7 +384,13 @@ Item {
             if (now > lastT)
                 velocity = 0.6 * velocity + 0.4 * (p.x - lastX) * 1000 / (now - lastT)
             lastX = p.x; lastT = now
-            swipe.offset = Math.max(-swipe.width, Math.min(swipe.bidirectional ? swipe.width : 0, startOffset + dx))
+            if (!engaged) {
+                if (Math.abs(dx) < swipe.dragLag)
+                    return
+                engaged = true
+                lagSide = dx > 0 ? 1 : -1
+            }
+            swipe.offset = Math.max(-swipe.width, Math.min(swipe.bidirectional ? swipe.width : 0, startOffset + dx - lagSide * swipe.dragLag))
             if (Math.abs(swipe.offset) >= swipe.revealingOffset && swipe.state_ === "covered") {
                 swipe.state_ = "revealing"
                 swipe._coverOthers()
@@ -385,7 +406,8 @@ Item {
                 return
             }
             tracking = false
-            swipe._release(velocity)
+            // a drag the card did not follow yet is no fling
+            swipe._release(engaged ? velocity : 0)
         }
         onClicked: (mouse) => { mouse.accepted = swipe.state_ !== "covered" }
         onCanceled: {
