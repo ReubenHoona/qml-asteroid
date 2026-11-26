@@ -157,9 +157,11 @@ Item {
         bottom (px). CP3A: under the heading band and 4 dp over the edge
         button. Material 2 (S29-c): from y 61 (30.5 dp) to y 262 (61 dp
         above the bottom), through the heading band; the fades keep the
-        heading clear. */
+        heading clear. The bottom follows the confirm button: 61 dp over
+        the round one (52 + 9 dp, \l roundConfirm, also when a Material 3
+        picker asks for it), else clear of the edge button. */
     property real columnsTop: _m2 ? Theme.dp(30.5) : headingTop + headingHeight + sectionPadding
-    property real columnsBottomMargin: _m2 ? Theme.dp(61)
+    property real columnsBottomMargin: roundConfirm ? Theme.dp(61)
         : sectionPadding + buttonHeight + Theme.size.edgeButtonBottomGap
     /*! Material 2: the neighbours' scale one pitch away (\l Picker) and the
         selected value 2.5 dp under the columns' centre. */
