@@ -169,9 +169,13 @@ Dialog {
                                       : twoButtons ? Math.floor((hasIcon ? 0.104 : 0.1248) * _h)
                                       : hasIcon ? Math.ceil(0.012 * _h) : Math.ceil(0.10 * _h)
     readonly property real sidePadding: Math.ceil(0.052 * _w)
-    readonly property real bottomPadding: _round ? (scrolling ? Math.floor(0.2083 * _h) : infoBottomPadding)
-                                         : buttons === "edge" ? _edge.preferredHeight + Theme.size.edgeButtonBottomGap + edgeGap
-                                         : 0.3646 * _h
+    readonly property real bottomPadding: _round && scrolling ? Math.floor(0.2083 * _h) : _fitBottomPadding
+    // the bottom padding while the content fits: what scrolling is decided
+    // on (it never reads bottomPadding, which reads scrolling: no binding
+    // loop when a dialog changes style while shown)
+    readonly property real _fitBottomPadding: _round ? infoBottomPadding
+                                            : buttons === "edge" ? _edge.preferredHeight + Theme.size.edgeButtonBottomGap + edgeGap
+                                            : 0.3646 * _h
     /*! Gap above the edge button: 4 dp, 16 dp with no text and no rows. */
     readonly property real edgeGap: (text === "" && _rows.children.length === 0) ? Theme.dp(16) : Theme.dp(4)
     readonly property real itemSpacing: Theme.dp(4)
@@ -227,10 +231,19 @@ Dialog {
         return h + Math.max(0, n - 1) * _spacing
     }
     /*! The content does not fit: it scrolls as a scaling list. */
-    readonly property bool scrolling: naturalHeight + topPadding + (_round ? infoBottomPadding : bottomPadding) > _h + 0.5
+    readonly property bool scrolling: naturalHeight + topPadding + _fitBottomPadding > _h + 0.5
     // half the free height while it fits: above the content, and in the round
     // styles again between the content and the buttons (stock's packed chain)
     readonly property real _freeHalf: scrolling ? 0 : Math.max(0, (_h - topPadding - bottomPadding - naturalHeight) / 2)
+    // two buttons: the View TextView boxes, from the first baseline to the
+    // last one and its gap below. Qt makes the last line ceil(ascent +
+    // descent) high, so the box is worked out here for the row and never
+    // written back into the text (padding from contentHeight is a binding
+    // loop: the text lays itself out again when its padding changes)
+    readonly property real _titleBox: _title.topPadding + _titleMetrics.ascent
+                                      + (_title.lineCount - 1) * _title.lineHeight + titleLastBaseline
+    readonly property real _textBox: _text.topPadding + _textMetrics.ascent
+                                     + (_text.lineCount - 1) * _text.lineHeight + textLastBaseline
 
     // stock starts the list at item 0
     function _toStart() {
@@ -304,7 +317,7 @@ Dialog {
             }
             EdgeRow {
                 id: _titleRow
-                innerHeight: alert.title !== "" && !alert.info ? _title.y + _title.height : 0
+                innerHeight: alert.title !== "" && !alert.info ? _title.y + (alert.twoButtons ? alert._titleBox : _title.height) : 0
                 Label {
                     id: _title
                     x: alert.twoButtons ? alert.infoTextSidePadding : alert.titleSidePadding - alert.sidePadding
@@ -328,18 +341,11 @@ Dialog {
                         when: alert.twoButtons
                         value: alert.titleFirstBaseline - _titleMetrics.ascent
                     }
-                    // Qt makes the last line ceil(ascent + descent) high:
-                    // measure the box from the last baseline instead
-                    Binding on bottomPadding {
-                        when: alert.twoButtons
-                        value: alert.titleLastBaseline + _titleMetrics.ascent
-                               + (_title.lineCount - 1) * _title.lineHeight - _title.contentHeight
-                    }
                 }
             }
             EdgeRow {
                 id: _textRow
-                innerHeight: alert._message !== "" ? _text.height + _text.y : 0
+                innerHeight: alert._message !== "" ? _text.y + (alert.twoButtons ? alert._textBox : _text.height) : 0
                 Label {
                     id: _text
                     y: alert.info ? alert.infoTextTop : alert.twoButtons ? alert.messageTop : alert.textTopSpacing
@@ -360,10 +366,7 @@ Dialog {
                     topPadding: alert.info ? alert.infoFirstBaseline - _textMetrics.ascent
                               : alert.twoButtons ? alert.textFirstBaseline - _textMetrics.ascent
                               : (lineHeight - _textMetrics.height) / 2
-                    bottomPadding: alert.info ? alert.infoLastBaseline - _textMetrics.descent
-                                 : alert.twoButtons ? alert.textLastBaseline + _textMetrics.ascent
-                                                      + (lineCount - 1) * lineHeight - contentHeight
-                                 : 0
+                    bottomPadding: alert.info ? alert.infoLastBaseline - _textMetrics.descent : 0
                     FontMetrics {
                         id: _textMetrics
                         font: _text.font

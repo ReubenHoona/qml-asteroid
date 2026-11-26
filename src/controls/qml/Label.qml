@@ -71,7 +71,20 @@ Text {
     readonly property var _role: Theme.type[role] || Theme.type.bodyLarge
     // the role size (QFont pixel sizes are integers); a caller font.pixelSize means Qt natural
     // line spacing and no tracking, as before the type roles
-    readonly property bool _styled: font.pixelSize === Math.round(_role.pixelSize)
+    readonly property bool _styled: (_pxReady ? _px : font.pixelSize) === Math.round(_role.pixelSize)
+    // the font size, followed from fontChanged once complete instead of
+    // read from font: _styled writes font.letterSpacing and the axes, so a
+    // binding on font saw its own writes (a binding loop each time the role
+    // changed at run time)
+    property real _px: -1
+    property bool _pxReady: false
+    Connections {
+        target: _label
+        function onFontChanged() {
+            if (_label._pxReady && _label.font.pixelSize !== _label._px)
+                _label._px = _label.font.pixelSize
+        }
+    }
     // a fixed line box as stock (GoogleTypographyKt.java:19); a ratio set
     // by a caller (lineHeight: 0.9) keeps the proportional mode
     readonly property bool _lineBox: _styled && lineHeight >= 4
@@ -123,5 +136,9 @@ Text {
         _appliedWeight = _roleWeight
     }
     on_RoleWeightChanged: if (_appliedWeight !== -1) _applyWeight()
-    Component.onCompleted: _applyWeight()
+    Component.onCompleted: {
+        _px = font.pixelSize
+        _pxReady = true
+        _applyWeight()
+    }
 }
