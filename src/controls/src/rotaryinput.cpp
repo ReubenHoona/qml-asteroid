@@ -401,6 +401,7 @@ struct Found {
     QQuickItem *exit = nullptr;   /* deepest item with a rotaryExit signal */
     int exitDepth = -1;
     bool blocked = false;
+    bool modal = false;           /* a modal surface covers pos */
 };
 
 /* Depth-first over the whole item tree in paint order: the last scrollable
@@ -409,10 +410,19 @@ struct Found {
 static void collect(QQuickItem *item, const QPointF &scenePos, int depth, Found *f,
                     RotaryInput::Kind (*kindOf)(QQuickItem *))
 {
-    if (!item->isVisible() || item->opacity() <= 0.0)
+    if (!item->isVisible())
         return;
     const QPointF p = item->mapFromScene(scenePos);
     const bool inside = item->contains(p);
+    /* a modal surface (a shown Dialog: rotaryModal) under pos hides every
+     * view drawn before it (paint order): only what it holds is a target,
+     * also in the first frame of its fade */
+    if (inside && item->property("rotaryModal").toBool()) {
+        *f = Found();
+        f->modal = true;
+    }
+    if (item->opacity() <= 0.0)
+        return;
     if (inside && hasWheelHandler(item))
         f->blocked = true;
     if (inside) {
@@ -465,11 +475,14 @@ static void collect(QQuickItem *item, const QPointF &scenePos, int depth, Found 
     }
 }
 
-QQuickItem *RotaryInput::findTarget(QQuickWindow *window, const QPointF &pos, Kind *kind, bool *blocked) const
+QQuickItem *RotaryInput::findTarget(QQuickWindow *window, const QPointF &pos, Kind *kind, bool *blocked,
+                                    bool *modal) const
 {
     Found f;
     collect(window->contentItem(), pos, 0, &f, &RotaryInput::kindOf);
     *blocked = f.blocked;
+    if (modal)
+        *modal = f.modal;
     *kind = Kind(f.bestKind);
     QQuickItem *best = f.best;
     if (best && !effectivelyVisible(best))
@@ -532,8 +545,20 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
         if (m_pressWindow == window && m_pressTime.isValid() && m_pressTime.elapsed() < PRESS_MEMORY_MS)
             pos = m_pressPos;
         bool blocked = false;
+        bool modal = false;
         Kind kind = None;
-        QQuickItem *t = findTarget(window, pos, &kind, &blocked);
+        QQuickItem *t = findTarget(window, pos, &kind, &blocked, &modal);
+        if (!blocked && !t && modal) {
+            /* a shown Dialog with nothing to scroll: the crown turns
+             * nothing, and Qt must not hand the wheel to the screen under
+             * it (stock: the dialog window takes the rotary input) */
+            qCDebug(lcRotary) << "modal, nothing to scroll" << event->angleDelta();
+            m_target = nullptr;
+            m_redirector = nullptr;
+            m_kind = None;
+            event->accept();
+            return true;
+        }
         if (blocked || !t) {
             qCDebug(lcRotary) << "pass" << event->angleDelta() << (blocked ? "(WheelHandler)" : "(no view)");
             m_target = nullptr;
@@ -1004,4 +1029,14 @@ bool RotaryInput::flashIndicator(QQuickItem *flickable)
             || !flickable->inherits("QQuickFlickable") || !scrollsVertically(flickable))
         return false;
     return showIndicator(flickable, true);
+}
+
+void RotaryInput::coverIndicator(QQuickItem *cover)
+{
+    if (!m_indicator || !cover)
+        return;
+    QQuickItem *f = qobject_cast<QQuickItem *>(m_indicator->property("flickable").value<QObject *>());
+    if (f && cover->isAncestorOf(f))
+        return;
+    m_indicator->setProperty("shown", false);
 }

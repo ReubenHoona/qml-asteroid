@@ -83,6 +83,9 @@ Item {
     /*! Hold the display on while shown (confirmations only, as stock). */
     property bool keepScreenOn: false
 
+    /*! Modal for the crown and the scroll indicator while shown: they see
+        only what the dialog holds, never the screen under it (RotaryInput). */
+    readonly property bool rotaryModal: _shown
     /*! The display is held on now (\l keepScreenOn and shown). */
     readonly property bool holdingDisplay: keepScreenOn && _shown
     /*! The dialog is shown (between \l open() and \l close()). */
@@ -135,6 +138,9 @@ Item {
             _rise = enterRise * _riseH
         }
         _shown = true
+        // the scroll indicator of the screen under it goes (stock: it is
+        // under the dialog; S25 shows none)
+        RotaryInput.coverIndicator(dialog)
         _enter.restart()
         opened()
     }

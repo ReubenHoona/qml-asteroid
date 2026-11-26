@@ -117,6 +117,13 @@ public:
      * In an Application the view also goes to the time text (ScrollAway)
      * as a new screen. */
     Q_INVOKABLE bool flashIndicator(QQuickItem *flickable);
+    /* A modal surface (a Dialog) shows over the screen: the indicator of a
+     * view that is not inside it fades out now, as stock's belongs to the
+     * screen under the dialog (the Wear OS 6 confirmation S25 shows none).
+     * While an item with `property bool rotaryModal: true` covers the touch
+     * or the middle of the window, the crown and the indicator only see
+     * the views inside it. */
+    Q_INVOKABLE void coverIndicator(QQuickItem *cover);
 
     bool systemIndicator() const { return m_systemIndicator; }
     void setSystemIndicator(bool on);
@@ -132,7 +139,8 @@ private:
 
     bool handleWheel(QQuickWindow *window, QWheelEvent *event);
     void notePress(QQuickWindow *window, const QPointF &pos);
-    QQuickItem *findTarget(QQuickWindow *window, const QPointF &pos, Kind *kind, bool *blocked) const;
+    QQuickItem *findTarget(QQuickWindow *window, const QPointF &pos, Kind *kind, bool *blocked,
+                           bool *modal = nullptr) const;
     static Kind kindOf(QQuickItem *item);
     static bool scrollsVertically(QQuickItem *item);
     static bool scrollsHorizontally(QQuickItem *item);
