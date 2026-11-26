@@ -372,6 +372,9 @@ EdgePacker::EdgePacker(QQuickItem *flickable) : QObject(flickable),
     m_flickable(flickable), m_key(flickable), m_watch(new EdgeContainerWatch(this))
 {
     connect(flickable, SIGNAL(contentYChanged()), this, SLOT(scrolled()));
+    /* what restAtTop reads besides contentY */
+    connect(flickable, SIGNAL(originYChanged()), this, SLOT(originMoved()));
+    connect(flickable, SIGNAL(topMarginChanged()), this, SLOT(originMoved()));
     connect(flickable, SIGNAL(movementStarted()), this, SLOT(gestureStarted()));
     connect(flickable, &QQuickItem::heightChanged, this, &EdgePacker::viewportResized);
     connect(flickable, &QQuickItem::visibleChanged, this, &EdgePacker::scheduleRelayout);
@@ -424,6 +427,13 @@ void EdgePacker::scrolled()
 {
     m_unsettled = 0;
     relayout();
+}
+
+/* originY or topMargin: only restAtTop rows read them (no rebuild) */
+void EdgePacker::originMoved()
+{
+    if (m_restRows)
+        scrolled();
 }
 
 void EdgePacker::makeDue()
@@ -505,6 +515,7 @@ void EdgePacker::rebuild()
 {
     m_dirty = false;
     m_rows.clear();
+    m_restRows = false;
     /* the items between the rows taking part and the content */
     QVector<QQuickItem *> containers;
     QQuickItem *f = m_flickable;
@@ -571,6 +582,8 @@ void EdgePacker::rebuild()
         containers.clear();
     }
     m_watch->set(containers);
+    for (const Row &r : std::as_const(m_rows))
+        m_restRows = m_restRows || r.effect->m_restAtTop;
     for (EdgeEffect *e : std::as_const(rest))
         e->setLayoutValues(1, 1, 1, 0, 0);
     std::stable_sort(m_rows.begin(), m_rows.end(),

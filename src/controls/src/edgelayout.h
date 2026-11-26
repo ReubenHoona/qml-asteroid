@@ -185,6 +185,9 @@ public:
  * costs no more than before. A change they make while the rows are being
  * laid out (a transform bound to a row's own values) is not followed: it
  * would lay the rows out again for ever.
+ *
+ * restAtTop rows also read the Flickable's originY and topMargin: a change
+ * of either lays the kept rows out again (no rebuild).
  */
 class EdgePacker : public QObject
 {
@@ -209,6 +212,7 @@ private slots:
     void flushScheduled();
     void viewportResized();
     void gestureStarted();
+    void originMoved();
 
 private:
     explicit EdgePacker(QQuickItem *flickable);
@@ -244,6 +248,8 @@ private:
      * a move by a transform (owned) */
     friend class EdgeContainerWatch;
     EdgeContainerWatch *m_watch = nullptr;
+    /* a row taking part has restAtTop: originY and topMargin move it */
+    bool m_restRows = false;
     bool m_dirty = true;
     bool m_busy = false;
     bool m_again = false;
