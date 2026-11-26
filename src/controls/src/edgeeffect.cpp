@@ -247,6 +247,12 @@ void EdgeEffect::findFlickable()
         m_packer = packer;
         if (m_packer)
             m_packer->add(this);
+    } else if (m_packer) {
+        /* the same Flickable, but the item or one of its parents changed
+         * (reparented inside the content, item set to another row): the
+         * row may have moved without a y change, so the kept rows are
+         * worked out again */
+        m_packer->scheduleRelayout();
     }
     if (m_flickable != found) {
         m_flickable = found;
