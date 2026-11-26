@@ -147,6 +147,11 @@ QtObject {
         from +W/2 on 0.8/300, scale 0.8 -> 1 on 1.0/500, fade in on
         1.0/1500; the old one to scale 0.85 on 1.0/150, to -W/2 on 0.8/200,
         to alpha 0.6 on 1.0/1400.
+        The Wear OS 6 emulator pushes the same way (Settings > Display,
+        recorded at 1x, V12): the new page is scaled about the centre,
+        0.86, 0.89, 0.92, 0.94, 0.95, 0.97, 0.98 at 48 to 151 ms (this
+        spring: 0.86, 0.89, 0.91, 0.93, 0.95, 0.96, 0.97), and the old page
+        slides left, shrinks and dims (-56 px, 0.92, 0.55 at 100 ms).
     */
     readonly property var push: ({
         enterOffset: 0.5, enterScale: 0.8, exitOffset: -0.5, exitScale: 0.85, exitAlpha: 0.6,
@@ -158,6 +163,9 @@ QtObject {
         (PredictiveBackNavHostKt.java:147-161): the current screen x = W p,
         scale 1 -> 0.8; the previous one x = -W/2 (1 - p), scale 0.8 -> 1,
         alpha 0.5 -> 1; commit and cancel on 1.0/1500.
+        The emulator's pop (V12) also shrinks the top page (0.88 by the
+        time it is 100 to 120 px to the right) and brings the page below
+        in from the left, dimmed.
     */
     readonly property var inAppBack: ({
         topScale: 0.8, belowOffset: -0.5, belowScale: 0.8, belowAlpha: 0.5,
