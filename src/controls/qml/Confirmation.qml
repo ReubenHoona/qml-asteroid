@@ -27,9 +27,10 @@ import org.asteroid.controls
     OpenOnPhoneDialogDefaults.java:32,51; androidx ConfirmationDialog.kt,
     OpenOnPhoneDialog.kt), px on the 384 px screen:
     \list
-    \li all: an opaque black \l Dialog (entry 1.25 -> 1, swipe right closes
-        it early, a tap does nothing), shown for \l duration (4000 ms by
-        default; callers may pass the stock 899 or 1500), the screen held on
+    \li all: an opaque black \l Dialog (a fade and a short rise in and
+        out, swipe right closes it early, a tap does nothing), shown for
+        \l duration (4000 ms by default; callers may pass the stock 899 or
+        1500), the screen held on
         while it shows; the message curved along the bottom edge, centred
         at 6 o'clock, arcLarge 36 px weight 599, 4 px from the edge, fading
         in after 100 ms (150 ms for open on phone);

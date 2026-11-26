@@ -23,29 +23,29 @@ import org.asteroid.controls
     \qmltype Dialog
     \inqmlmodule org.asteroid.controls
 
-    \brief The Wear OS Material 3 dialog container (E01): a full-screen,
-    opaque black window over the screen it belongs to.
+    \brief The Wear OS dialog container (E01): a full-screen, opaque black
+    window over the screen it belongs to.
 
-    Stock CP3A (androidx.wear.compose.material3 Dialog, Settings decomp
-    DialogKt$$ExternalSyntheticLambda0.java:67-68,148,173-175,218,255,
-    DialogKt.java:108, MotionSchemeKt$$ExternalSyntheticLambda0.java:13-18,
-    AnimationSpecUtilsKt.java:115-126):
+    Show and hide as the stock Wear OS 6 emulator (System > Restart, motion
+    M15, measured from its 1x and 10x screen recordings):
     \list
-    \li no window dim (setDimAmount(0)); the background is opaque #000000;
-    \li show: alpha 0 -> 1 on a critically damped spring of stiffness 3150
-        (fastEffects 1400 made 50 % faster: 1400 x 1.5^2), the content scale
-        1.25 -> 1.0 on stiffness 1125 (defaultEffects 500 x 1.5^2);
-    \li hide: alpha 1 -> 0 on fastEffects (1400), the content scale
-        1.0 -> 1.25 on 1125;
-    \li \l behind (the screen under the dialog) scales 1.0 -> 0.85 on show
-        and back on hide, on 1125;
+    \li no window dim; the background is opaque #000000 and fades with the
+        dialog, so the screen under it cross-fades: it shows at 1 - \l alpha
+        and is not moved or scaled (\l behind is left alone); nothing zooms
+        (\l contentScale stays 1);
+    \li show: alpha 0 -> 1 while the content rises from \l enterRise (10 %
+        of the height, 38.4 px on the 384 px screen) to 0, both over
+        \l enterDuration (200 ms) on standard (0.2, 0, 0, 1);
+    \li hide: alpha 1 -> 0 while the content rises on to \l exitRise
+        (-5 %, -19.2 px), both over \l exitDuration (150 ms) on
+        standardAccelerate (0.3, 0, 1, 1);
     \li a swipe right is BasicSwipeToDismissBox (motion B7;
         BasicSwipeToDismissBoxKt.java:53, its ExternalSyntheticLambda8,
         Lambda9, Lambda11, SwipeableV2Kt$$ExternalSyntheticLambda0.java:10,
         SwipeableV2State.java:169): at the progress p = dx / width the dialog
         scales lerp(1, 0.7, p) with its right edge on the screen's, under a
         content scrim min(p / 2, 0.3); the screen under it shows through a
-        scrim 0.5 (1 - p) while \l behind scales lerp(0.85, 1.0, p). Let go
+        scrim 0.5 (1 - p) at its own size. Let go
         at half the width or more (whatever its speed, even flung back) or
         flung right at 800 dp/s, it slides off (past p 0.7 it runs to the
         right edge), else it comes back, both in 200 ms on
@@ -53,11 +53,12 @@ import org.asteroid.controls
         slide, and a dialog that stays shown after it comes back at rest;
         no haptic plays on the way (stock has none); a swipe that starts
         while it settles takes it over where it is;
-    \li Reduce animations makes every spring land at once (WearSpring).
+    \li Reduce animations makes the show and hide land at once
+        (Motion.duration).
     \endlist
 
-    Nothing runs while the dialog is hidden or once its springs have
-    settled. \l keepScreenOn holds the display on (Nemo.KeepAlive) only while
+    Nothing runs while the dialog is hidden or once its animations have
+    finished. \l keepScreenOn holds the display on (Nemo.KeepAlive) only while
     the dialog is shown; confirmations set it, alert dialogs never do.
 
     \qml
@@ -72,7 +73,8 @@ import org.asteroid.controls
 Item {
     id: dialog
 
-    /*! The screen under the dialog: scaled to \l behindScale while shown. */
+    /*! The screen under the dialog. Kept for callers: the dialog no longer
+        moves or scales it (it shows through the fading dialog). */
     property Item behind: null
     /*! A swipe right dismisses the dialog. */
     property bool swipeToDismiss: true
@@ -86,31 +88,31 @@ Item {
     /*! The dialog is shown (between \l open() and \l close()). */
     readonly property bool shown: _shown
     /*! The dialog is on screen, entering, shown or leaving. */
-    readonly property bool active: _shown || _alpha.value > 0.001 || _alpha.running
-    /*! The content, scaled by the entry and exit. */
+    readonly property bool active: _shown || _a > 0.001 || _enter.running || _exit.running
+    /*! The content, moved by the entry and exit. */
     default property alias contentData: _content.data
     readonly property alias content: _content
     /*! The dialog surface (background and content), moved by the swipe. */
     readonly property alias surface: _surface
 
-    /*! Window alpha now. */
-    readonly property real alpha: _alpha.value
-    /*! Content scale now. */
-    readonly property real contentScale: _scale.value
+    /*! Window alpha now (the background and the content). */
+    readonly property real alpha: _a
+    /*! Content scale: always 1, stock Wear OS 6 does not zoom a dialog. */
+    readonly property real contentScale: 1
+    /*! Vertical offset of the content now, px (positive is lower). */
+    readonly property real contentOffset: _rise
     /*! Horizontal offset of the swipe, px (the finger's, then the settle's). */
     readonly property real swipeOffset: _offset
 
-    /* ---- stock numbers ---- */
-    /*! Content scale at the start of the entry and the end of the exit. */
-    readonly property real enterScale: 1.25
-    /*! Scale of \l behind while the dialog shows. */
-    readonly property real behindScale: 0.85
-    /*! faster(50 %, fastEffects 1400): 3150. */
-    readonly property real alphaInStiffness: Motion.faster(Motion.standard.fastEffects, 50).stiffness
-    /*! fastEffects: 1400. */
-    readonly property real alphaOutStiffness: Motion.standard.fastEffects.stiffness
-    /*! faster(50 %, defaultEffects 500): 1125, for the content and \l behind. */
-    readonly property real scaleStiffness: Motion.faster(Motion.standard.defaultEffects, 50).stiffness
+    /* ---- stock numbers (Wear OS 6 emulator, M15) ---- */
+    /*! Content offset at the start of the show, a fraction of the height. */
+    readonly property real enterRise: 0.10
+    /*! Content offset at the end of the hide, a fraction of the height. */
+    readonly property real exitRise: -0.05
+    /*! Show: alpha and offset, ms, on Motion.easing.standard. */
+    readonly property int enterDuration: 200
+    /*! Hide: alpha and offset, ms, on Motion.easing.standardAccelerate. */
+    readonly property int exitDuration: 150
 
     /*! Emitted by \l open(). */
     signal opened()
@@ -126,18 +128,14 @@ Item {
         // a swipe left from the last showing (kept, or opened again while
         // it fades out) ends: the dialog comes back at rest
         _endSwipe()
+        // opened again while it fades out: it comes back from where it is
+        _exit.stop()
         if (!active) {
-            _alpha.snapTo(0)
-            _scale.snapTo(enterScale)
+            _a = 0
+            _rise = enterRise * _riseH
         }
         _shown = true
-        _alpha.stiffness = alphaInStiffness
-        _alpha.animateTo(1)
-        _scale.animateTo(1)
-        if (behind) {
-            _behind.target = behind
-            _behind.animateTo(behindScale)
-        }
+        _enter.restart()
         opened()
     }
 
@@ -146,14 +144,19 @@ Item {
         if (!_shown)
             return
         _shown = false
-        _alpha.stiffness = alphaOutStiffness
-        _alpha.animateTo(0)
-        _scale.animateTo(enterScale)
-        if (_behind.target)
-            _behind.animateTo(1)
+        _enter.stop()
+        _exit.restart()
     }
 
     property bool _shown: false
+    // alpha and the content offset (px), driven by _enter and _exit
+    property real _a: 0
+    property real _rise: 0
+    // the height the rise is a fraction of
+    readonly property real _riseH: height > 0 ? height : 384
+    // for tests: the show and hide animations
+    readonly property alias _enterAnimation: _enter
+    readonly property alias _exitAnimation: _exit
 
     /* ---- the swipe to dismiss (B7) ---- */
     // a swipe is on (the finger, or its 200 ms settle)
@@ -169,12 +172,6 @@ Item {
     readonly property real _squeezeX: Math.max(0, (1 - _swipeScale) * width / 2)
     readonly property real _surfaceX: _squeeze ? _squeezeX
                                                : _squeezeX + (width - _squeezeX) * Math.max(0, _p - 0.7) / 0.3
-    // behind follows the swipe only while the dialog is shown: once close()
-    // has sent it back to 1.0, neither the finger nor a settle snaps it again
-    on_OffsetChanged: {
-        if (_swiping && _shown && _behind.target)
-            _behind.snapTo(behindScale + (1 - behindScale) * _p)
-    }
     function _endSwipe() {
         _settle.stop()
         _swipeBase = 0
@@ -185,32 +182,54 @@ Item {
 
     anchors.fill: parent
     visible: active
-    opacity: _alpha.value
+    opacity: _a
     z: 1000
 
-    WearSpring {
-        id: _alpha
-        dampingRatio: 1.0
-        visibilityThreshold: 0.002
+    // show: alpha 0 -> 1 and the content from +10 % of the height to 0
+    ParallelAnimation {
+        id: _enter
+        NumberAnimation {
+            target: dialog
+            property: "_a"
+            to: 1
+            duration: Motion.duration(dialog.enterDuration)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Motion.easing.standard
+        }
+        NumberAnimation {
+            target: dialog
+            property: "_rise"
+            to: 0
+            duration: Motion.duration(dialog.enterDuration)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Motion.easing.standard
+        }
+    }
+    // hide: alpha 1 -> 0 and the content on up to -5 % of the height
+    ParallelAnimation {
+        id: _exit
+        NumberAnimation {
+            target: dialog
+            property: "_a"
+            to: 0
+            duration: Motion.duration(dialog.exitDuration)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Motion.easing.standardAccelerate
+        }
+        NumberAnimation {
+            target: dialog
+            property: "_rise"
+            to: dialog.exitRise * dialog._riseH
+            duration: Motion.duration(dialog.exitDuration)
+            easing.type: Easing.BezierSpline
+            easing.bezierCurve: Motion.easing.standardAccelerate
+        }
         onFinished: {
-            if (!dialog._shown && value <= 0.002) {
+            if (!dialog._shown) {
                 dialog._endSwipe()
                 dialog.closed()
             }
         }
-    }
-    WearSpring {
-        id: _scale
-        stiffness: dialog.scaleStiffness
-        dampingRatio: 1.0
-        visibilityThreshold: 0.0005
-    }
-    WearSpring {
-        id: _behind
-        property: "scale"
-        stiffness: dialog.scaleStiffness
-        dampingRatio: 1.0
-        visibilityThreshold: 0.0005
     }
     // the settle once the finger has let go: SWIPE_TO_DISMISS_BOX_ANIMATION_SPEC,
     // tween(200, LinearOutSlowInEasing); off the screen it dismisses
@@ -228,12 +247,9 @@ Item {
                     dialog.close()
                 // kept (closeOnSwipe false and the owner did not close it):
                 // stock's box snaps back to rest once dismissed, so the
-                // dialog comes back on screen and behind to its 0.85
-                if (dialog._shown) {
+                // dialog comes back on screen
+                if (dialog._shown)
                     dialog._endSwipe()
-                    if (_behind.target)
-                        _behind.snapTo(dialog.behindScale)
-                }
             } else {
                 dialog._endSwipe()
             }
@@ -323,7 +339,7 @@ Item {
             Item {
                 id: _content
                 anchors.fill: parent
-                scale: _scale.value
+                transform: Translate { y: dialog._rise }
             }
             // the content scrim of the swipe, min(p / 2, 0.3)
             Rectangle {
