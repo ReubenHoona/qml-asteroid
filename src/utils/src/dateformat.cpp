@@ -8,6 +8,7 @@
 #include <QLocale>
 #include <QTimeZone>
 
+#include <unicode/ucal.h>
 #include <unicode/udat.h>
 #include <unicode/udateintervalformat.h>
 #include <unicode/udatpg.h>
@@ -210,21 +211,79 @@ bool DateFormat::markerFirst(const QString &locale) const
     return a >= 0 && h >= 0 && a < h;
 }
 
+/* ICU's offset from UTC (seconds, DST included) of a zone it has, at an instant; false for a zone it
+ * does not have (ucal_getCanonicalTimeZoneID: not a system zone) */
+static bool icuOffset(const QString &zone, qint64 msecs, int *seconds)
+{
+    UErrorCode status = U_ZERO_ERROR;
+    UChar canonical[128];
+    UBool isSystem = false;
+    ucal_getCanonicalTimeZoneID(reinterpret_cast<const UChar *>(zone.utf16()), zone.length(), canonical, 128,
+                                &isSystem, &status);
+    if (U_FAILURE(status) || !isSystem)
+        return false;
+    UCalendar *cal = ucal_open(reinterpret_cast<const UChar *>(zone.utf16()), zone.length(), "en_US",
+                               UCAL_GREGORIAN, &status);
+    if (U_SUCCESS(status))
+        ucal_setMillis(cal, double(msecs), &status);
+    const int32_t raw = U_SUCCESS(status) ? ucal_get(cal, UCAL_ZONE_OFFSET, &status) : 0;
+    const int32_t dst = U_SUCCESS(status) ? ucal_get(cal, UCAL_DST_OFFSET, &status) : 0;
+    if (cal)
+        ucal_close(cal);
+    if (U_FAILURE(status))
+        return false;
+    *seconds = (raw + dst) / 1000;
+    return true;
+}
+
+/* The zone ICU formats a range in and the instants it is given, so that it shows the wall times Qt shows
+ * for the same QDateTimes (QLocale::toString; a local time is the C library's, with TZ, through the tm
+ * struct's offset), and a range and a single time agree:
+ *  - the zone's id (Qt's system zone for local times) when ICU has that zone and gives both ends Qt's
+ *    offsets: ICU's own rules and zone names, a DST change inside the range included;
+ *  - else, both ends at one whole-minute offset (a POSIX TZ string such as "XYZ-12" or one with DST rules,
+ *    a zone ICU does not have): that fixed offset, "GMT+hh:mm";
+ *  - else (a POSIX TZ whose DST starts or ends inside the range): UTC, each end moved by its own offset.
+ * ICU given a zone id it does not have formats in GMT (Etc/Unknown), whatever TZ says. */
+static QString icuRangeZone(const QDateTime &from, const QDateTime &to, double *fromMs, double *toMs)
+{
+    const qint64 a = from.toMSecsSinceEpoch();
+    const qint64 b = to.toMSecsSinceEpoch();
+    const int offA = from.offsetFromUtc();
+    const int offB = to.offsetFromUtc();
+    *fromMs = double(a);
+    *toMs = double(b);
+    QString id;
+    if (from.timeSpec() == Qt::LocalTime && to.timeSpec() == Qt::LocalTime)
+        id = QString::fromLatin1(QTimeZone::systemTimeZoneId());
+    else if (from.timeSpec() == Qt::TimeZone && to.timeSpec() == Qt::TimeZone && from.timeZone() == to.timeZone())
+        id = QString::fromLatin1(from.timeZone().id());
+    int icuA = 0, icuB = 0;
+    if (!id.isEmpty() && icuOffset(id, a, &icuA) && icuOffset(id, b, &icuB) && icuA == offA && icuB == offB)
+        return id;
+    if (offA == offB && offA % 60 == 0 && qAbs(offA) < 24 * 3600) {
+        const int m = qAbs(offA) / 60;
+        return QString::asprintf("GMT%c%02d:%02d", offA < 0 ? '-' : '+', m / 60, m % 60);
+    }
+    *fromMs = double(a + qint64(offA) * 1000);
+    *toMs = double(b + qint64(offB) * 1000);
+    return QStringLiteral("UTC");
+}
+
 QString DateFormat::formatRange(const QDateTime &from, const QDateTime &to, const QString &skeleton, const QString &locale) const
 {
     const QByteArray loc = icuLocale(locale);
-    // the zone Qt formats in, so a range and a single time agree
-    const QString tz = QString::fromLatin1(QTimeZone::systemTimeZoneId());
+    // the zone and instants that give Qt's wall times, so a range and a single time agree
+    double fromMs = 0, toMs = 0;
+    const QString tz = icuRangeZone(from, to, &fromMs, &toMs);
     UErrorCode status = U_ZERO_ERROR;
     UDateIntervalFormat *f = udtitvfmt_open(loc.constData(),
                                             reinterpret_cast<const UChar *>(skeleton.utf16()), skeleton.length(),
-                                            tz.isEmpty() ? nullptr : reinterpret_cast<const UChar *>(tz.utf16()),
-                                            tz.isEmpty() ? 0 : tz.length(), &status);
+                                            reinterpret_cast<const UChar *>(tz.utf16()), tz.length(), &status);
     QString result;
     if (U_SUCCESS(status)) {
         UChar buf[256];
-        const int32_t len = udtitvfmt_format(f, double(from.toMSecsSinceEpoch()), double(to.toMSecsSinceEpoch()),
-                                             buf, 256, nullptr, &status);
+        const int32_t len = udtitvfmt_format(f, fromMs, toMs, buf, 256, nullptr, &status);
         if (U_SUCCESS(status))
             result = QString(reinterpret_cast<const QChar *>(buf), len);
     }

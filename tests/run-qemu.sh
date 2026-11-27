@@ -1,7 +1,8 @@
 #!/bin/sh
 # Runs the qml-asteroid tests under qemu-aarch64 against a copy of an AsteroidOS image rootfs, without
 # a device: tests/qml/tst_*.qml with the sysroot's qmltestrunner (offscreen platform, 384 x 384, the
-# software Qt Quick backend) and the C++ tests of tests/crownspeed and tests/flatmesh, cross-built.
+# software Qt Quick backend) and the C++ tests of tests/crownspeed, tests/flatmesh and tests/dateformat,
+# cross-built.
 # org.asteroid.controls is this checkout: the plugin cross-built from it (tests/qemu/xbuild.sh, unless
 # XB= names a build dir that holds one) and the QML of src/controls/qml, in an overlay that comes before
 # the rootfs's imports; everything else (Qt, org.asteroid.utils, Nemo.*, fonts, icons) is the rootfs's.
@@ -9,7 +10,8 @@
 #
 # usage: R=<rootfs copy> QEMU=<qemu-aarch64> XSYSROOT=<sysroot> SYSROOTS=<sysroots-components> \
 #        tests/run-qemu.sh [test ...]
-#   test: tst_x.qml or tst_x (tests/qml), a path to a .qml file, crownspeed or flatmesh; none = all
+#   test: tst_x.qml or tst_x (tests/qml), a path to a .qml file, crownspeed, flatmesh or dateformat;
+#         none = all
 # Prints a line per file (its totals, the binding-loop warnings it logged, its failures) and a grand
 # total; exits 1 when a test failed, a file gave no totals (crash, timeout) or logged a binding loop.
 #
@@ -62,11 +64,11 @@ QMLS=""
 CTESTS=""
 if [ $# -eq 0 ]; then
 	QMLS=$(cd "$C/tests/qml" && ls tst_*.qml | sed "s#^#$C/tests/qml/#")
-	CTESTS="crownspeed flatmesh"
+	CTESTS="crownspeed flatmesh dateformat"
 fi
 for a in "$@"; do
 	case $a in
-	crownspeed|tst_crownspeed|flatmesh|tst_flatmesh)
+	crownspeed|tst_crownspeed|flatmesh|tst_flatmesh|dateformat|tst_dateformat)
 		CTESTS="$CTESTS ${a#tst_}" ;;
 	*/*.qml)
 		[ -f "$a" ] || die "no test $a"

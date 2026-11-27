@@ -1,9 +1,10 @@
 # qml-asteroid tests
 
 The tests that pin down how the controls (`org.asteroid.controls`) look and behave: QML tests in
-`tests/qml`, run with `qmltestrunner`, and two C++ tests (`tests/crownspeed`, `tests/flatmesh`).
-They run without a watch, under qemu-aarch64 against a copy of an image rootfs, with the controls
-plugin cross-built from this checkout.
+`tests/qml`, run with `qmltestrunner`, and three C++ tests (`tests/crownspeed`, `tests/flatmesh`,
+`tests/dateformat`, the last one of org.asteroid.utils' DateFormat). They run without a watch, under
+qemu-aarch64 against a copy of an image rootfs, with the controls plugin cross-built from this
+checkout.
 
 ## Running
 
@@ -64,12 +65,13 @@ at the end (`KEEP=1` keeps it, `SHOTS=<dir>` keeps the pictures).
   late.
 
 The C++ tests also build on the host with their own CMakeLists.txt (Qt 6 Quick and Test for
-`tests/flatmesh`, nothing for `tests/crownspeed`):
+`tests/flatmesh`, Qt 6 Core and Test and ICU for `tests/dateformat`, nothing for `tests/crownspeed`):
 
 ```sh
 cmake -S tests/flatmesh -B build/flatmesh && cmake --build build/flatmesh && \
   QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software build/flatmesh/tst_flatmesh
 cmake -S tests/crownspeed -B build/crownspeed && cmake --build build/crownspeed && build/crownspeed/tst_crownspeed
+cmake -S tests/dateformat -B build/dateformat && cmake --build build/dateformat && build/dateformat/tst_dateformat
 ```
 
 ## What each file covers
@@ -114,6 +116,7 @@ independent checks. Stock numbers in the tests are measured on the Wear OS 6 emu
 | `tst_fpq2.qml` | RotaryInput's crown-speed mode on ListViews: free scroll, snap to the nearest item, StrictlyEnforceRange, a finger takes over |
 | `crownspeed/` | CrownSpeed, the crown-speed state machine: px scroll, ticks per 42 px, limits, the 80 ms snap, a crown event during a snap, reset (counted as checks) |
 | `flatmesh/` | FlatMesh: still by default, "input" glides for the idle timeout, "always" while visible; visibility, window, animated and reduce-motion stops; dconf motion and glide keys and their overrides |
+| `dateformat/` | DateFormat.formatRange: the wall times Qt shows, under zone names and hand-written POSIX TZ strings (invented names) with and without DST rules, a DST change inside the range; one instant reads as format(); the zone field of a POSIX string is its offset |
 
 Fixtures: `qml/ref/WearEdge.js` (the launcher's edge model that EdgeLayout must match),
 `qml/ref/LaunchSplash.qml` (the launcher's launch splash, as `tst_ux.qml` loads it),

@@ -3,16 +3,18 @@
 #   tst_crownspeed  tests/crownspeed (plain C++) with src/controls/src/crownspeed.cpp
 #   tst_flatmesh    tests/flatmesh (Qt Test) with the real flatmesh.cpp, flatmeshnode.cpp and spring.cpp
 #                   and the in-memory MDConfItem of tests/flatmesh/stubs, as tests/flatmesh/CMakeLists.txt
+#   tst_dateformat  tests/dateformat (Qt Test) with the real src/utils/src/dateformat.cpp and ICU, as
+#                   tests/dateformat/CMakeLists.txt
 # The CMakeLists.txt in those folders build the same for the host.
-# usage: B=<build dir> XSYSROOT=<sysroot> SYSROOTS=<sysroots-components> [SRCTREE=<tree>] sh tests/qemu/xbuild-ctests.sh [crownspeed] [flatmesh]
-# Output: $B/ctests/tst_crownspeed, $B/ctests/tst_flatmesh.
+# usage: B=<build dir> XSYSROOT=<sysroot> SYSROOTS=<sysroots-components> [SRCTREE=<tree>] sh tests/qemu/xbuild-ctests.sh [crownspeed] [flatmesh] [dateformat]
+# Output: $B/ctests/tst_crownspeed, $B/ctests/tst_flatmesh, $B/ctests/tst_dateformat.
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 C=${SRCTREE:-$(cd "$here/../.." && pwd)}
 . "$here/toolchain.sh"
 SRC=$C/src/controls/src
 O=$B/ctests
-want=${*:-crownspeed flatmesh}
+want=${*:-crownspeed flatmesh dateformat}
 for t in $want; do
 	case $t in
 	crownspeed)
@@ -49,6 +51,26 @@ for t in $want; do
 		$CXX --sysroot="$X" -o "$O/tst_flatmesh" $ALL -L"$X/usr/lib" -lQt6Test -lQt6Quick -lQt6QmlModels \
 			-lQt6Qml -lQt6QmlMeta -lQt6Gui -lQt6Core -Wl,--allow-shlib-undefined
 		echo "built $O/tst_flatmesh" ;;
+	dateformat)
+		F=$C/tests/dateformat; U=$C/src/utils/src; D=$O/dateformat; mkdir -p "$D"
+		INC="-I$U -I$D $QTINC"
+		DEF="-DQT_NO_DEBUG -DQT_SHARED -DQT_TESTLIB_LIB -DQT_CORE_LIB"
+		FL="--sysroot=$X -std=gnu++17 -O2 -fPIC -Wall -Wno-unused-parameter $DEF $INC"
+		$CXX $FL -dM -E -x c++ /dev/null > "$D/moc_predefs.h.new"
+		putf "$D/moc_predefs.h.new" "$D/moc_predefs.h"
+		$MOC --include "$D/moc_predefs.h" $DEF $INC -o "$D/tst_dateformat.moc.new" "$F/tst_dateformat.cpp"
+		putf "$D/tst_dateformat.moc.new" "$D/tst_dateformat.moc"
+		$MOC --include "$D/moc_predefs.h" $DEF $INC -o "$D/moc_dateformat.cpp.new" "$U/dateformat.h"
+		putf "$D/moc_dateformat.cpp.new" "$D/moc_dateformat.cpp"
+		ALL=""
+		for f in "$F/tst_dateformat.cpp" "$U/dateformat.cpp" "$D/moc_dateformat.cpp"; do
+			o=$D/$(basename "$f").o
+			cxx "$o" "$f" $FL
+			ALL="$ALL $o"
+		done
+		$CXX --sysroot="$X" -o "$O/tst_dateformat" $ALL -L"$X/usr/lib" -lQt6Test -lQt6Core -licui18n -licuuc \
+			-licudata -Wl,--allow-shlib-undefined
+		echo "built $O/tst_dateformat" ;;
 	*)
 		echo "xbuild-ctests.sh: no C++ test $t" >&2; exit 2 ;;
 	esac
