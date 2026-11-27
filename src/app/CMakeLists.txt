@@ -1,7 +1,7 @@
 set(TARGET asteroidapp6)
 set(NAME AsteroidApp6)
 
-add_library(${TARGET} asteroidapp.cpp)
+add_library(${TARGET} asteroidapp.cpp localefollower.cpp)
 
 target_link_libraries(
 	${TARGET}
@@ -10,6 +10,7 @@ target_link_libraries(
 		Qt::Quick
 	PRIVATE
 		Qt::Core
+		Qt::DBus
 )
 
 target_link_libraries(

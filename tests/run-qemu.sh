@@ -64,11 +64,11 @@ QMLS=""
 CTESTS=""
 if [ $# -eq 0 ]; then
 	QMLS=$(cd "$C/tests/qml" && ls tst_*.qml | sed "s#^#$C/tests/qml/#")
-	CTESTS="crownspeed flatmesh dateformat"
+	CTESTS="crownspeed flatmesh dateformat asteroidapp"
 fi
 for a in "$@"; do
 	case $a in
-	crownspeed|tst_crownspeed|flatmesh|tst_flatmesh|dateformat|tst_dateformat)
+	crownspeed|tst_crownspeed|flatmesh|tst_flatmesh|dateformat|tst_dateformat|asteroidapp|tst_asteroidapp)
 		CTESTS="$CTESTS ${a#tst_}" ;;
 	*/*.qml)
 		[ -f "$a" ] || die "no test $a"

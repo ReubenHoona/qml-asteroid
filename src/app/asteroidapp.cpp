@@ -25,8 +25,10 @@
  */
 
 #include "asteroidapp.h"
+#include "localefollower.h"
 
 #include <MDeclarativeCache>
+#include <QDBusConnection>
 #include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -58,31 +60,7 @@ namespace AsteroidApp {
         return exe.baseName();
     }
 
-    int installTranslators(QCoreApplication *app, const QString &name, const QString &directory)
-    {
-        int installed = 0;
-        // English first: Qt searches the most recently installed catalog
-        // first, so the locale's catalog below wins wherever it has the id
-        // (as LocaleManager does for the launcher). Stock apps show complete
-        // text in every language; an untranslated id falls back to English.
-        QTranslator *fallback = new QTranslator(app);
-        if (fallback->load(name + QStringLiteral(".en"), directory)) {
-            app->installTranslator(fallback);
-            installed++;
-        } else {
-            delete fallback;
-        }
-
-        QTranslator *translator = new QTranslator(app);
-        if (translator->load(QLocale(), name, QStringLiteral("."), directory, QStringLiteral(".qm"))) {
-            app->installTranslator(translator);
-            installed++;
-        } else {
-            qDebug() << "Failed to load" << QLocale().name() << "translations for" << name;
-            delete translator;
-        }
-        return installed;
-    }
+    // installTranslators(): localefollower.cpp (a new language replaces the catalogues it installed)
 
     QGuiApplication *application(int &argc, char **argv)
     {
@@ -107,6 +85,12 @@ namespace AsteroidApp {
             app->setApplicationName(appName());
 
             installTranslators(app, appName(), QStringLiteral("/usr/share/translations"));
+
+            // a language chosen while the app runs (Settings, setup, the phone's language) is
+            // followed at once, as the launcher does: localed announces it on the system bus
+            LocaleFollower *follower = new LocaleFollower(app, appName(),
+                                                          QStringLiteral("/usr/share/translations"), app);
+            follower->watch(QDBusConnection::systemBus());
         } else {
             qWarning("AsteroidApp::application() called multiple times");
         }

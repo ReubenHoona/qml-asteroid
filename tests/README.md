@@ -114,8 +114,10 @@ independent checks. Stock numbers in the tests are measured on the Wear OS 6 emu
 | `tst_q5swipe.qml` | SwipeToReveal's drag under expressiveLook: the card starts 29 dp after the press, then 1:1 (N61-09) |
 | `tst_fpq1.qml` | no dictation during a call, the "Cannot record audio while in a call" toast, SetInUse("mic") around recording, Icon alpha after a dim colour (mocks, icons) |
 | `tst_fpq2.qml` | RotaryInput's crown-speed mode on ListViews: free scroll, snap to the nearest item, StrictlyEnforceRange, a finger takes over |
+| `tst_r5fu.qml` | R5 B-10: the voice screen asks ngfd for `dictation_start` when the microphone is ready and `ui_mic` at the end (event names only, Haptics.played; nothing is played) (mocks) |
 | `crownspeed/` | CrownSpeed, the crown-speed state machine: px scroll, ticks per 42 px, limits, the 80 ms snap, a crown event during a snap, reset (counted as checks) |
 | `flatmesh/` | FlatMesh: still by default, "input" glides for the idle timeout, "always" while visible; visibility, window, animated and reduce-motion stops; dconf motion and glide keys and their overrides |
+| `asteroidapp/` | R5 C-03: AsteroidApp::installTranslators replaces its catalogues for a new language; LocaleFollower takes localed's Locale (LANG), sets the default locale and LANG, installs the catalogues again and retranslates the QML of the app's windows; invented catalogues in `asteroidapp/i18n` |
 | `dateformat/` | DateFormat.formatRange: the wall times Qt shows, under zone names and hand-written POSIX TZ strings (invented names) with and without DST rules, a DST change inside the range; one instant reads as format(); the zone field of a POSIX string is its offset |
 
 Fixtures: `qml/ref/WearEdge.js` (the launcher's edge model that EdgeLayout must match),

@@ -49,6 +49,8 @@ namespace AsteroidApp {
     // then the catalog of the current locale, so an id the locale has not
     // translated shows English instead of the raw id. Returns the number of
     // catalogs installed. application() calls it with the app's own name.
+    // Called again (a new language), it first removes the catalogs of <name>
+    // it installed before.
     ASTEROIDAPP_EXPORT int installTranslators(QCoreApplication *app, const QString &name,
                                               const QString &directory);
 
