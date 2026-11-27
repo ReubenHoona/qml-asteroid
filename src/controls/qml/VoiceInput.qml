@@ -241,8 +241,14 @@ FocusScope {
         if (phase === s)
             return
         phase = s
-        if (s === "ready" || s === "done")
-            Haptics.longPress()   // stock: the mic haptic (thud) at ready and at the end
+        // stock (Gboard VoiceSoundManager ged.java, com.java:83, gha.java:106; mic_interaction_haptic.xml): the
+        // start tone when the microphone is ready, with the mic haptic (thud), and the thud alone at the end (the
+        // end beep is off by default: cpc.java:17). ngfd's dictation_start is eos' own 320 ms tone (a system
+        // sound, silent while ring and notifications are muted) and the thud; ui_mic is the thud
+        if (s === "ready")
+            Haptics.playWithSound("dictation_start")
+        else if (s === "done")
+            Haptics.play("ui_mic")
     }
 
     /*! Starts listening: a new utterance; what was dictated before stays. Not

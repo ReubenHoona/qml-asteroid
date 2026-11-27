@@ -107,6 +107,10 @@ public:
     Q_INVOKABLE void play(const QString &event);
     /*! Any ngfd event by name in a class (Haptics.Touch or Haptics.Crown). */
     Q_INVOKABLE void playAs(const QString &event, int hapticClass);
+    /*! An ngfd event with its sound: the event file's sound (which ngfd plays, or silences, by the sound
+        profile and the event's sound class) and its haptic while touch feedback is on. For the few
+        events stock pairs with a sound, as the dictation start tone (Gboard's earcon). */
+    Q_INVOKABLE void playWithSound(const QString &event);
 
 signals:
     void enabledChanged();

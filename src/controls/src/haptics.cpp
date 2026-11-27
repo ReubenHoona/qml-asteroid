@@ -98,6 +98,27 @@ void Haptics::play(const QString &event)
     playAs(event, Touch);
 }
 
+void Haptics::playWithSound(const QString &event)
+{
+    if (event.isEmpty())
+        return;
+    emit played(event);
+    QDBusMessage msg = QDBusMessage::createMethodCall(QLatin1String(NGF_SERVICE),
+                                                      QLatin1String(NGF_PATH),
+                                                      QLatin1String(NGF_INTERFACE),
+                                                      QStringLiteral("Play"));
+    /* The sound as the event file says (ngfd's profile and class rules decide whether it is
+     * heard); the haptic only while touch feedback is on, as for every touch effect */
+    QVariantMap props;
+    props.insert(QStringLiteral("media.audio"), true);
+    props.insert(QStringLiteral("media.vibra"), enabled());
+    msg << event << props;
+    if (!QDBusConnection::systemBus().send(msg))
+        qCDebug(lcHaptics) << "could not send" << event;
+    else
+        qCDebug(lcHaptics) << "play with sound" << event;
+}
+
 void Haptics::longPress() { playAs(QStringLiteral("ui_long_press"), Touch); }
 void Haptics::virtualKey() { playAs(QStringLiteral("ui_virtual_key"), Touch); }
 void Haptics::keyboardTap() { playAs(QStringLiteral("ui_key_tap"), Touch); }
