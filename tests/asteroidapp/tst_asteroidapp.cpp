@@ -113,6 +113,28 @@ private slots:
         QCOMPARE(QLocale().name(), QStringLiteral("en_GB"));
     }
 
+    // R5 C-04: the phone's language with a region the image has no catalogue for (de_AT): the language's own
+    // catalogue (de_DE), the region's formats kept
+    void nearestCatalogue()
+    {
+        qputenv("LANG", "en_GB.utf8");
+        QLocale::setDefault(QLocale(QStringLiteral("en_GB")));
+        AsteroidApp::installTranslators(qApp, QStringLiteral("tst-app"), dir());
+        LocaleFollower follower(qApp, QStringLiteral("tst-app"), dir());
+        QVERIFY(follower.apply(QStringLiteral("de_AT.utf8")));
+        QCOMPARE(QLocale().name(), QStringLiteral("de_AT"));
+        QCOMPARE(hello(), QStringLiteral("Hallo"));
+        QCOMPARE(qtTrId("id-tst-only-english"), QStringLiteral("Only English"));
+        // a language without any catalogue: English
+        QVERIFY(follower.apply(QStringLiteral("sw_KE.utf8")));
+        QCOMPARE(hello(), QStringLiteral("Hello"));
+        // a region of a language-only catalogue: QTranslator's own find (fr_CA: fr)
+        QVERIFY(follower.apply(QStringLiteral("fr_CA.utf8")));
+        QCOMPARE(hello(), QStringLiteral("Bonjour"));
+        QVERIFY(follower.apply(QStringLiteral("en_GB.utf8")));
+        QCOMPARE(hello(), QStringLiteral("Hello"));
+    }
+
     void noBus()
     {
         LocaleFollower follower(qApp, QStringLiteral("tst-app"), dir());
