@@ -1,6 +1,7 @@
 // FP-Q2 (r2-63): host test of CrownSpeed, the state machine of RotaryInput's
 // crown-speed mode (free scroll by crown px, tick every 42 px, one limit bump
 // per end, the snap 80 ms after the last crown event, to the nearest item).
+// R6 K-08: SnapSpeed, the stock rotary snap (speed-dependent threshold, at most 2 steps an event).
 // Build: tests/crownspeed/CMakeLists.txt (host), or tests/run-qemu.sh crownspeed (aarch64, qemu).
 #include "crownspeed.h"
 
@@ -136,8 +137,57 @@ static void resetAndEmpty()
     CHECK(!c.snapDue(10000), "and no snap due");
 }
 
+// R6 K-08: the stock rotary snap step (androidx ThresholdHandler / HighResSnapRotaryScrollableBehavior)
+static void snapSpeedSteps()
+{
+    const double ITEM = 80;
+    // the thresholds: the whole item below 300 px/s, two thirds of it from 3000 px/s, eased between
+    CHECK(near(SnapSpeed::threshold(0, ITEM, 1, 1.5), 80), "slow: the whole item");
+    CHECK(near(SnapSpeed::threshold(300, ITEM, 1, 1.5), 80), "300 px/s: still the whole item");
+    CHECK(near(SnapSpeed::threshold(3000, ITEM, 1, 1.5), 80 / 1.5), "3000 px/s: item / 1.5");
+    CHECK(near(SnapSpeed::threshold(9000, ITEM, 1, 1.5), 80 / 1.5), "above: item / 1.5");
+    CHECK(near(SnapSpeed::threshold(1650, ITEM, 1, 1.5), 80 / 1.25, 1e-3), "half way: the easing's middle");
+    CHECK(near(SnapSpeed::threshold(3000, ITEM, 5, 7.5), 80 / 7.5), "pagers: the High dividers");
+    CHECK(near(SnapSpeed::threshold(0, 0.5, 1, 1.5), 1), "at least 1 px");
+
+    // a fresh gesture: no speed, the pending px start from nothing
+    SnapStep s = SnapSpeed::step(50, 2000, 30, 30, -1, false, ITEM, 1, 1.5);
+    CHECK(s.steps == 0 && near(s.pending, 30) && near(s.velocity, 0), "the first event: 30 px, no speed");
+    s = SnapSpeed::step(s.pending, s.velocity, 60, 60, 300, false, ITEM, 1, 1.5);
+    CHECK(s.steps == 0 && near(s.pending, 60), "300 ms later: a new gesture (the 30 px are dropped)");
+    s = SnapSpeed::step(70, 900, 30, 30, 10, true, ITEM, 1, 1.5);
+    CHECK(s.steps == 0 && near(s.pending, 30) && near(s.velocity, 0), "fresh: speed and pending reset");
+
+    // slow turning (1 px speed per 20 ms = 50 px/s): one item per 80 px, the remainder kept
+    s = SnapSpeed::step(0, 0, 40, 1, -1, false, ITEM, 1, 1.5);
+    s = SnapSpeed::step(s.pending, s.velocity, 40, 1, 20, false, ITEM, 1, 1.5);
+    CHECK(s.steps == 1 && near(s.pending, 0, 1e-9), "80 px slowly: one item");
+    s = SnapSpeed::step(s.pending, s.velocity, -100, 1, 20, false, ITEM, 1, 1.5);
+    CHECK(s.steps == -1 && near(s.pending, -20, 1e-9), "back 100 px: one item back, 20 px pending");
+
+    // at most two items an event, the rest dropped below a threshold
+    s = SnapSpeed::step(0, 0, 250, 1, -1, false, ITEM, 1, 1.5);
+    CHECK(s.steps == 2, "250 px in one event: two items, not three");
+    CHECK(near(s.pending, 10, 1e-9), "250 - 3 x 80 = 10 px left (fmod)");
+
+    // fast spinning (36 px of stock speed every 10 ms = 3600 px/s): the threshold falls towards item / 1.5,
+    // so the same 40 px events step more items than slow ones
+    int slow = 0, fast = 0;
+    SnapStep a, b;
+    for (int i = 0; i < 12; i++) {
+        a = SnapSpeed::step(a.pending, a.velocity, 40, 1, i ? 20 : -1, false, ITEM, 1, 1.5);
+        b = SnapSpeed::step(b.pending, b.velocity, 40, 36, i ? 10 : -1, false, ITEM, 1, 1.5);
+        slow += a.steps;
+        fast += b.steps;
+    }
+    CHECK(slow == 6, "480 px slowly: 6 items");
+    CHECK(fast >= 8 && fast <= 9, "480 px spun fast: 8 or 9 items (up to 480 / 53.3)");
+    CHECK(b.velocity > 3000, "the speed past 3000 px/s");
+}
+
 int main()
 {
+    snapSpeedSteps();
     freeScrollAndTicks();
     tickRemainder();
     limitAtEnds();

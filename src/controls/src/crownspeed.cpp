@@ -87,3 +87,56 @@ void CrownSpeed::reset()
     m_limitArmed = true;
     m_direction = 0;
 }
+
+/* CubicBezier(x1, y1, x2, y2) easing at x (compose CubicBezierEasing) */
+static double cubicBezier(double x1, double y1, double x2, double y2, double x)
+{
+    auto b = [](double p1, double p2, double t) {
+        const double u = 1 - t;
+        return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
+    };
+    double lo = 0, hi = 1, t = x;
+    for (int i = 0; i < 32; i++) {
+        t = (lo + hi) / 2;
+        if (b(x1, x2, t) < x)
+            lo = t;
+        else
+            hi = t;
+    }
+    return b(y1, y2, t);
+}
+
+double SnapSpeed::threshold(double velocity, double itemSize, double minDivider, double maxDivider)
+{
+    double u = (velocity - MinVelocity) / (MaxVelocity - MinVelocity);
+    u = u < 0 ? 0 : u > 1 ? 1 : u;
+    const double e = cubicBezier(0.5, 0, 0.5, 1, u);
+    const double t = itemSize / (minDivider + (maxDivider - minDivider) * e);
+    return t < 1 ? 1 : t;
+}
+
+SnapStep SnapSpeed::step(double pending, double velocity, double px, double speedPx, long long gapMs, bool fresh,
+                         double itemSize, double minDivider, double maxDivider)
+{
+    SnapStep s;
+    if (gapMs < 0 || gapMs > BreakMs || fresh) {
+        pending = 0;
+        velocity = 0;
+    } else {
+        const double v = std::fabs(speedPx) / (gapMs < 1 ? 1 : gapMs) * 1000.0;
+        velocity = v * Smoothing + (1 - Smoothing) * velocity;
+    }
+    const double threshold = SnapSpeed::threshold(velocity, itemSize, minDivider, maxDivider);
+    pending += px;
+    int steps = int(pending / threshold);
+    if (steps != 0) {
+        pending -= steps * threshold;
+        steps = steps < -MaxPerEvent ? -MaxPerEvent : steps > MaxPerEvent ? MaxPerEvent : steps;
+        if (std::fabs(pending) >= threshold)
+            pending = std::fmod(pending, threshold);
+    }
+    s.steps = steps;
+    s.pending = pending;
+    s.velocity = velocity;
+    return s;
+}

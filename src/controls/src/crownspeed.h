@@ -77,4 +77,32 @@ private:
     int m_direction = 0;
 };
 
+/*
+ * The stock rotary snap of RotaryInput's snapping views (androidx RotaryScrollable ThresholdHandler,
+ * RotarySnapSensitivityValues; HighResSnapRotaryScrollableBehavior, which the Material 3 Picker uses on
+ * the Pixel Watch's high-resolution crown, M3S/PickerKt.java:257-322): the crown's px pile up and a step
+ * is due every threshold = itemSize / lerp(minDivider, maxDivider, CubicBezier(0.5, 0, 0.5, 1)(
+ * (v - 300) / 2700)) px, v the crown's speed in px/s smoothed with 0.4; at most 2 steps per event; an
+ * event more than 200 ms after the one before (or a new gesture) starts from nothing.
+ * Plain C++: tests/crownspeed drives it.
+ */
+struct SnapStep {
+    int steps = 0;        /* items to step now (signed) */
+    double pending = 0;   /* px not yet worth an item */
+    double velocity = 0;  /* the smoothed speed, px/s */
+};
+struct SnapSpeed {
+    static constexpr double MinVelocity = 300;
+    static constexpr double MaxVelocity = 3000;
+    static constexpr double Smoothing = 0.4;
+    static constexpr int MaxPerEvent = 2;
+    static constexpr long long BreakMs = 200;
+    /* One crown event: px the distance it adds (signed), speedPx the same event in the px the speed is
+     * measured in (stock's), gapMs since the event before (-1: none), fresh a new crown gesture. */
+    static SnapStep step(double pending, double velocity, double px, double speedPx, long long gapMs, bool fresh,
+                         double itemSize, double minDivider, double maxDivider);
+    /* the px an item takes at this speed (at least 1) */
+    static double threshold(double velocity, double itemSize, double minDivider, double maxDivider);
+};
+
 #endif // CROWNSPEED_H

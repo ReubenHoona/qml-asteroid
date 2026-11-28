@@ -40,7 +40,9 @@ import org.asteroid.controls
         SpinnerDelegate does the sums).
     \li The top and bottom 33 % fade into the background (PickerKt.java:531).
     \li A fling ends on an option; a crown step glides to the next option in
-        about 100 ms.
+        about 100 ms. The crown steps as stock's Picker: one option per detent
+        turned slowly, up to 1.5 per detent spun fast, at most 2 per crown
+        event (RotaryInput, \c rotarySnapSpeed).
     \li Focused column OnBackground (#ffffff), others SecondaryDim (#d1d4e1)
         in TimePicker (TimePickerTokens.java), PrimaryDim (#cdd4eb) in
         DatePicker (DatePickerTokens.java, DatePickerKt.java:97).
@@ -227,6 +229,10 @@ Item {
         preferredHighlightEnd: height / 2 + picker.optionHeight / 2 + picker.centerOffset
         highlightRangeMode: ListView.StrictlyEnforceRange
         snapMode: ListView.SnapToItem
+        // the crown snaps as stock's Material 3 Picker (HighResSnapRotaryScrollableBehavior,
+        // M3S/PickerKt.java:257-322): a speed-dependent share of an option (one per detent turned
+        // slowly, up to 1.5 per detent spun fast), at most 2 options an event; RotaryInput (K-08)
+        property bool rotarySnapSpeed: true
         highlightMoveDuration: picker._instant ? 0 : Motion.duration(picker.stepDuration)
         highlightMoveVelocity: -1
         boundsBehavior: Flickable.StopAtBounds

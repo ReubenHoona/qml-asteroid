@@ -83,15 +83,11 @@ static const qreal MAX_ROTARY_FLING_DP = 2750.0;
  * Default (lists, pickers) 1 -> 1.5, High (pagers) 5 -> 7.5; at most 2
  * snaps per event; 200 ms between events breaks the gesture; the snap
  * glides on a spring of stiffness 200 */
-static const qreal SNAP_MIN_VELOCITY = 300.0;
-static const qreal SNAP_MAX_VELOCITY = 3000.0;
-static const qreal SNAP_VELOCITY_SMOOTHING = 0.4;
+/* (the speed, the cap and the gesture break: SnapSpeed, crownspeed.h) */
 static const qreal SNAP_DIVIDER_MIN = 1.0;
 static const qreal SNAP_DIVIDER_MAX = 1.5;
 static const qreal PAGER_DIVIDER_MIN = 5.0;
 static const qreal PAGER_DIVIDER_MAX = 7.5;
-static const int MAX_SNAPS_PER_EVENT = 2;
-static const qint64 SNAP_GESTURE_BREAK_MS = 200;
 static const qreal SNAP_STIFFNESS = 200.0;
 /* Rotary overscroll exit (motion-transitions-16; SysUI ihx/kwg
  * ScrollAccumulator, scroll_accumulated_slop_threshold 96 raised to 150 by
@@ -224,29 +220,17 @@ static qreal tickPx(QQuickItem *item)
     return qMax<qreal>(8, h * TICK_FRACTION);
 }
 
+/* stock CP3A's px per count (choice 2 off) */
+static qreal stockPxPerCount(QQuickItem *item)
+{
+    return STOCK_SCALING_FACTOR * STOCK_SCROLL_FACTOR_DP * densityOf(item);
+}
+
 qreal RotaryInput::pxPerCount(QQuickItem *item) const
 {
     if (!m_fast)
-        return STOCK_SCALING_FACTOR * STOCK_SCROLL_FACTOR_DP * densityOf(item);
+        return stockPxPerCount(item);
     return m_px > 0 ? m_px : tickPx(item) / m_detent;
-}
-
-/* CubicBezier(x1, y1, x2, y2) easing at x (compose CubicBezierEasing) */
-static qreal cubicBezier(qreal x1, qreal y1, qreal x2, qreal y2, qreal x)
-{
-    auto b = [](qreal p1, qreal p2, qreal t) {
-        const qreal u = 1 - t;
-        return 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t;
-    };
-    qreal lo = 0, hi = 1, t = x;
-    for (int i = 0; i < 32; i++) {
-        t = (lo + hi) / 2;
-        if (b(x1, x2, t) < x)
-            lo = t;
-        else
-            hi = t;
-    }
-    return b(y1, y2, t);
 }
 
 static bool hasExitSignal(QObject *o)
@@ -637,7 +621,7 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
         break;
     case Snap:
     case Path:
-        if (m_fast) {
+        if (m_fast && !m_target->property("rotarySnapSpeed").toBool()) {
             /* the user's crown: one item per detent */
             m_pending += forward;
             const int steps = int(m_pending / m_detent);
@@ -646,25 +630,23 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
                 stepSnap(steps);
             }
         } else {
-            /* stock: a speed-dependent share of the item size */
-            const qreal px = forward * pxPerCount(m_target);
-            if (gapMs < 0 || gapMs > SNAP_GESTURE_BREAK_MS || newGesture) {
-                m_pending = 0;
-                m_snapVelocity = 0;
-            } else {
-                const qreal v = qAbs(px) / qMax<qint64>(1, gapMs) * 1000.0;
-                m_snapVelocity = v * SNAP_VELOCITY_SMOOTHING + (1 - SNAP_VELOCITY_SMOOTHING) * m_snapVelocity;
-            }
-            const qreal threshold = snapThreshold(px);
-            m_pending += px;
-            int steps = int(m_pending / threshold);
-            if (steps != 0) {
-                m_pending -= steps * threshold;
-                steps = qBound(-MAX_SNAPS_PER_EVENT, steps, MAX_SNAPS_PER_EVENT);
-                if (qAbs(m_pending) >= threshold)
-                    m_pending = std::fmod(m_pending, threshold);
-                stepSnap(steps);
-            }
+            /* stock: a speed-dependent share of the item size (SnapSpeed, crownspeed.h). A view with
+             * `property bool rotarySnapSpeed: true` (Picker.qml: the time, date and number pickers, as
+             * stock's Material 3 Picker, K-08) snaps so under the user's fast crown too: its crown
+             * distance is then one item per detent (the user's speed at the slowest), its speed stock's
+             * (stock px), so a fast spin steps up to 1.5 items per detent, at most 2 an event */
+            const qreal speedPx = forward * stockPxPerCount(m_target);
+            const qreal size = itemSize();
+            const qreal px = m_fast ? forward * size / m_detent : speedPx;
+            /* pagers (one item per page) use the High sensitivity dividers */
+            const bool pager = m_kind == Snap && m_target->property("snapMode").toInt() == 2;
+            const SnapStep s = SnapSpeed::step(m_pending, m_snapVelocity, px, speedPx, gapMs, newGesture, size,
+                                               pager ? PAGER_DIVIDER_MIN : SNAP_DIVIDER_MIN,
+                                               pager ? PAGER_DIVIDER_MAX : SNAP_DIVIDER_MAX);
+            m_pending = s.pending;
+            m_snapVelocity = s.velocity;
+            if (s.steps != 0)
+                stepSnap(s.steps);
         }
         break;
     default:
@@ -672,20 +654,6 @@ bool RotaryInput::handleWheel(QQuickWindow *window, QWheelEvent *event)
     }
     event->accept();
     return true;
-}
-
-/* Stock snap threshold in crown px for the current smoothed speed */
-qreal RotaryInput::snapThreshold(qreal px)
-{
-    Q_UNUSED(px)
-    const qreal u = qBound<qreal>(0, (m_snapVelocity - SNAP_MIN_VELOCITY)
-                                  / (SNAP_MAX_VELOCITY - SNAP_MIN_VELOCITY), 1);
-    const qreal e = cubicBezier(0.5, 0, 0.5, 1, u);
-    /* pagers (one item per page) use the High sensitivity dividers */
-    const bool pager = m_kind == Snap && m_target && m_target->property("snapMode").toInt() == 2;
-    const qreal divider = pager ? PAGER_DIVIDER_MIN + (PAGER_DIVIDER_MAX - PAGER_DIVIDER_MIN) * e
-                                : SNAP_DIVIDER_MIN + (SNAP_DIVIDER_MAX - SNAP_DIVIDER_MIN) * e;
-    return qMax<qreal>(1, itemSize() / divider);
 }
 
 /* The size of one item along the crown's axis (with the view's spacing) */

@@ -50,6 +50,12 @@ class QJSEngine;
  *    bump (Haptics.scrollLimit) at an end, re-armed once the view moves.
  *  - snapping views (PathView pickers, ListViews that snap or strictly
  *    enforce a highlight range) step item by item with Haptics.scrollFocus.
+ *    A snapping view with `property bool rotarySnapSpeed: true` (the
+ *    Material 3 pickers, Picker.qml) snaps as stock's Picker does
+ *    (HighResSnapRotaryScrollableBehavior, SnapSpeed in crownspeed.h:
+ *    a speed-dependent share of the item, at most 2 items an event)
+ *    under either crown setting; with crown-fast its crown distance is
+ *    one item per detent at the slowest.
  *  - crown-speed mode (stock's picker, face-interaction-32; crownspeed.h):
  *    a snapping ListView or GridView with `property bool rotaryCrownSpeed:
  *    true` scrolls freely by the crown's pixels (as a free view, with its
@@ -167,7 +173,6 @@ private:
     void playLimit(qreal pos);
     void noteFlingSample(qreal px);
     void maybeFling();
-    qreal snapThreshold(qreal px);
     qreal itemSize() const;
     qreal pxPerCount(QQuickItem *item) const;
     void animate(qreal dt);
@@ -201,8 +206,9 @@ private:
     QElapsedTimer m_lastEvent;
     qreal m_speed = 0;           /* smoothed counts per second */
 
-    /* snapping: counts (crown-fast) or crown px (stock) not yet worth an
-     * item, and the stock snap's smoothed crown speed in px/s */
+    /* snapping: counts (crown-fast) or crown px (stock, rotarySnapSpeed)
+     * not yet worth an item, and the stock snap's smoothed crown speed in
+     * px/s */
     qreal m_pending = 0;
     qreal m_snapVelocity = 0;
 
