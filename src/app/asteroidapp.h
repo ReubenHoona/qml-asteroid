@@ -51,7 +51,8 @@ namespace AsteroidApp {
     // catalogs installed. application() calls it with the app's own name.
     // Called again (a new language), it first removes the catalogs of <name>
     // it installed before. A region without a catalog of its own reads the
-    // language's catalog of another region (de_AT: de_DE).
+    // language's catalog of another region (de_AT: de_DE); an English region of
+    // CLDR's en_001 (en_NZ, en_AU, en_IE, en_IN...) reads the en_GB catalog.
     ASTEROIDAPP_EXPORT int installTranslators(QCoreApplication *app, const QString &name,
                                               const QString &directory);
 

@@ -11,5 +11,9 @@
         <source>Only English</source>
         <translation>Only English</translation>
     </message>
+    <message id="id-tst-colour">
+        <source>Color</source>
+        <translation>Color</translation>
+    </message>
 </context>
 </TS>

@@ -1,7 +1,7 @@
 set(TARGET asteroidapp6)
 set(NAME AsteroidApp6)
 
-add_library(${TARGET} asteroidapp.cpp localefollower.cpp)
+add_library(${TARGET} asteroidapp.cpp localefollower.cpp eoscatalogues.h)
 
 target_link_libraries(
 	${TARGET}

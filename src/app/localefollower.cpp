@@ -5,6 +5,7 @@
 
 #include "localefollower.h"
 #include "asteroidapp.h"
+#include "eoscatalogues.h"
 
 #include <QCoreApplication>
 #include <QDBusArgument>
@@ -38,26 +39,6 @@ static QHash<QString, QList<QPointer<QTranslator>>> &installedCatalogues()
     return installed;
 }
 
-// The language's catalogue for a region the image has none for (R5 C-04): the watch takes the phone's language
-// with the phone's region (de_AT: Austrian formats), as stock's PhoneSettingLocaleListener applies the phone's
-// locale when the watch has its language, but the image ships de_DE's catalogue only, and QTranslator::load(QLocale)
-// looks for de_AT and de. The catalogue of the language's main region (QLocale("de"): de_DE) when there is one,
-// else the first of its regions by name; "" when the language has none (the text stays English). The launcher's
-// LocaleManager uses the same rule (lipstick/src/eoscatalogues.h).
-static QString nearestCatalogue(const QString &name, const QString &directory, const QLocale &locale)
-{
-    if (locale.language() == QLocale::C || locale.language() == QLocale::AnyLanguage)
-        return QString();
-    const QString lang = QLocale::languageToCode(locale.language());
-    const QDir dir(directory);
-    const QStringList found = dir.entryList({ name + QLatin1Char('.') + lang + QStringLiteral("_*.qm") },
-                                            QDir::Files, QDir::Name);
-    if (found.isEmpty())
-        return QString();
-    const QString main = name + QLatin1Char('.') + QLocale(lang).name() + QStringLiteral(".qm");
-    return dir.filePath(found.contains(main) ? main : found.first());
-}
-
 namespace AsteroidApp {
     int installTranslators(QCoreApplication *app, const QString &name, const QString &directory)
     {
@@ -85,10 +66,10 @@ namespace AsteroidApp {
             delete fallback;
         }
 
+        // the locale's: an English region of en_001 reads en_GB's, else QTranslator's own search, else the
+        // language's other region (de_AT: de_DE), as every program of the image chooses (eoscatalogues.h)
         QTranslator *translator = new QTranslator(app);
-        const QString nearest = nearestCatalogue(name, directory, QLocale());
-        if (translator->load(QLocale(), name, QStringLiteral("."), directory, QStringLiteral(".qm"))
-            || (!nearest.isEmpty() && translator->load(nearest))) {
+        if (EosCatalogues::load(translator, name, directory, QLocale())) {
             app->installTranslator(translator);
             mine.append(translator);
             installed++;
