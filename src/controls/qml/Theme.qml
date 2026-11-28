@@ -168,8 +168,20 @@ QtObject {
         dismiss (BasicSwipeToDismissBox "regardless of layout direction"),
         the keyboard keys, media transport, arcs that run clockwise.
     */
-    readonly property bool rtl: _locale.textDirection === Qt.RightToLeft || isRtlLanguage(_locale.name)
-                                || isRtlLanguage(Qt.uiLanguage)
+    readonly property bool rtl: rtlFor(forceRtl, _locale.textDirection === Qt.RightToLeft || isRtlLanguage(_locale.name)
+                                                 || isRtlLanguage(Qt.uiLanguage))
+    /* C-19: Developer options > Force RTL Layout (stock debug.force_rtl: every screen right to left, whatever the
+       language; Settings puts it back off when developer options go off) */
+    property ConfigurationValue _forceRtlSetting: ConfigurationValue {
+        key: "/org/asteroidos/developer/force-rtl"
+        defaultValue: false
+    }
+    /*! Developer options > Force RTL Layout is on. */
+    readonly property bool forceRtl: _forceRtlSetting.value === true || _forceRtlSetting.value === "true"
+    /*! Right to left when forced (\a force: a bool, or dconf's string) or when the language is written so. */
+    function rtlFor(force, languageRtl) {
+        return force === true || force === "true" || languageRtl === true
+    }
     /*!
         The language codes written right to left that the language list offers (and a few more), for the
         locales Qt's own database lacks (Bakhtiari, \c bqi, reads as the C locale): the code of a locale name

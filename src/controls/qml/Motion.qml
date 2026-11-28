@@ -33,7 +33,9 @@ import Nemo.Configuration
 
     Accessibility > Reduce animations (\c{/org/asteroidos/a11y/reduce-motion})
     sets \l animationScale to 0: springs land at once, durations from
-    \l duration() are 0 and list edges stop scaling.
+    \l duration() are 0 and list edges stop scaling. Otherwise Developer
+    options > Animator duration scale
+    (\c{/org/asteroidos/developer/animator-duration-scale}) is the scale.
 */
 QtObject {
     id: motion
@@ -135,8 +137,26 @@ QtObject {
     }
     /*! Accessibility > Reduce animations is on. */
     readonly property bool reduceMotion: _reduceMotion.value === true
-    /*! 0 with Reduce animations (stock sets the animator scale to 0), else 1. */
-    readonly property real animationScale: reduceMotion ? 0 : 1
+    /* C-19: Developer options > Animator duration scale (stock animator_duration_scale: Animation off, .5x, 1x,
+       1.5x, 2x, 5x, 10x; 1x by default; Settings puts it back to 1 when developer options go off) */
+    property ConfigurationValue _animatorScale: ConfigurationValue {
+        key: "/org/asteroidos/developer/animator-duration-scale"
+        defaultValue: 1
+    }
+    /*! Developer options > Animator duration scale: 0 (off) to 10, 1 when unset or not a number. */
+    readonly property real animatorScale: scaleFor(false, _animatorScale.value)
+    /*! The scale for Reduce animations \a reduce and the developer setting \a setting. */
+    function scaleFor(reduce, setting) {
+        if (reduce === true)
+            return 0
+        var f = Number(setting)
+        if (setting === undefined || setting === null || setting === "" || !isFinite(f) || f < 0)
+            return 1
+        return Math.min(10, f)
+    }
+    /*! 0 with Reduce animations (stock sets the animator scale to 0), else the animator duration scale (1 unless
+        Developer options change it). */
+    readonly property real animationScale: scaleFor(reduceMotion, _animatorScale.value)
     /*! A tween duration in ms with the animation scale applied. */
     function duration(ms) { return ms * animationScale }
 
